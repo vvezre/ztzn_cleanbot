@@ -346,6 +346,31 @@ public class RailcarMessageService {
             redisData.put("taskCount", taskCount);
         }
 
+        Map<String, Object> taskOrigin = readObjectMap(statusNode, "taskOrigin");
+        if (taskOrigin != null && !taskOrigin.isEmpty()) {
+            redisData.put("taskOrigin", taskOrigin);
+        }
+
+        Map<String, Object> currentLocation = readObjectMap(statusNode, "currentLocation");
+        if (currentLocation != null && !currentLocation.isEmpty()) {
+            redisData.put("currentLocation", currentLocation);
+        }
+
+        Double distanceToTaskOriginM = readDouble(statusNode, "distanceToTaskOriginM");
+        if (distanceToTaskOriginM != null) {
+            redisData.put("distanceToTaskOriginM", distanceToTaskOriginM);
+        }
+
+        Double taskOriginToleranceM = readDouble(statusNode, "taskOriginToleranceM");
+        if (taskOriginToleranceM != null) {
+            redisData.put("taskOriginToleranceM", taskOriginToleranceM);
+        }
+
+        Boolean isAtTaskOrigin = readBoolean(statusNode, "isAtTaskOrigin");
+        if (isAtTaskOrigin != null) {
+            redisData.put("isAtTaskOrigin", isAtTaskOrigin);
+        }
+
         String onlineState = readText(statusNode, "online_state");
         if (onlineState != null) {
             redisData.put("onlineState", onlineState);

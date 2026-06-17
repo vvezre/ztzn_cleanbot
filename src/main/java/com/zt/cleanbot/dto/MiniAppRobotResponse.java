@@ -299,6 +299,16 @@ public class MiniAppRobotResponse {
      */
     private Long timestamp;
 
+    private LocationData taskOrigin;
+
+    private CurrentLocationData currentLocation;
+
+    private Double distanceToTaskOriginM;
+
+    private Double taskOriginToleranceM;
+
+    private Boolean isAtTaskOrigin;
+
     // ========== GPS 位置信息 ==========
 
     /**
@@ -403,4 +413,17 @@ public class MiniAppRobotResponse {
      * 设备扩展状态明细
      */
     private Map<String, Object> shadowDetail;
+
+    @Data
+    public static class LocationData {
+        private Double lon;
+        private Double lat;
+    }
+
+    @Data
+    public static class CurrentLocationData {
+        private Double lon;
+        private Double lat;
+        private Double heading;
+    }
 }

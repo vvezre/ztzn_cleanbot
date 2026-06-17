@@ -13,6 +13,7 @@ import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
@@ -96,6 +97,55 @@ class RailcarMessageServiceTest {
         verify(vehicleService, never()).save(any(Vehicle.class));
     }
 
+    @Test
+    @SuppressWarnings("unchecked")
+    void shouldPersistTaskOriginFieldsFromTVehicleStatus() {
+        ObjectMapper objectMapper = new ObjectMapper();
+        RailcarMessageService service = new RailcarMessageService(objectMapper);
+
+        VehicleService vehicleService = mock(VehicleService.class);
+        RedisUtil redisUtil = mock(RedisUtil.class);
+        DeviceStatusPublisher deviceStatusPublisher = mock(DeviceStatusPublisher.class);
+
+        Vehicle vehicle = new Vehicle();
+        vehicle.setSerialNumber("-T01250002");
+        vehicle.setCompanyCode("ZTZN-PVC");
+        vehicle.setProductType("-T01");
+        vehicle.setProductId("250002");
+        vehicle.setVehicleType("railcar");
+
+        when(vehicleService.getBySerialNumber("-T01250002")).thenReturn(vehicle);
+        when(redisUtil.setVehicle(eq("-T01250002"), any(), anyLong(), eq(TimeUnit.SECONDS))).thenReturn(true);
+
+        ReflectionTestUtils.setField(service, "vehicleService", vehicleService);
+        ReflectionTestUtils.setField(service, "redisUtil", redisUtil);
+        ReflectionTestUtils.setField(service, "deviceStatusPublisher", deviceStatusPublisher);
+        ReflectionTestUtils.setField(service, "taskLogService", mock(TaskLogService.class));
+        ReflectionTestUtils.setField(service, "vehicleLogService", mock(VehicleLogService.class));
+        ReflectionTestUtils.setField(service, "mqttOutboundChannel", mock(MessageChannel.class));
+        ReflectionTestUtils.setField(service, "railcarControlService", mock(RailcarControlService.class));
+        ReflectionTestUtils.setField(service, "railcarConfigService", mock(RailcarConfigService.class));
+        ReflectionTestUtils.setField(service, "commandStatusService", mock(CommandStatusService.class));
+
+        service.handleTRailcarStatus("-T01250002", tVehicleStatusPayload());
+
+        ArgumentCaptor<Object> redisPayload = ArgumentCaptor.forClass(Object.class);
+        verify(redisUtil).setVehicle(eq("-T01250002"), redisPayload.capture(), eq(86400L), eq(TimeUnit.SECONDS));
+        verify(deviceStatusPublisher).publishDeviceStatus(eq("-T01250002"), any(Map.class));
+
+        Map<String, Object> status = (Map<String, Object>) redisPayload.getValue();
+        Map<String, Object> taskOrigin = (Map<String, Object>) status.get("taskOrigin");
+        Map<String, Object> currentLocation = (Map<String, Object>) status.get("currentLocation");
+        assertEquals(31.123456, (Double) taskOrigin.get("lat"), 0.000001);
+        assertEquals(121.123456, (Double) taskOrigin.get("lon"), 0.000001);
+        assertEquals(31.123455, (Double) currentLocation.get("lat"), 0.000001);
+        assertEquals(121.123455, (Double) currentLocation.get("lon"), 0.000001);
+        assertEquals(180.0, (Double) currentLocation.get("heading"), 0.001);
+        assertEquals(0.018, (Double) status.get("distanceToTaskOriginM"), 0.0001);
+        assertEquals(0.02, (Double) status.get("taskOriginToleranceM"), 0.0001);
+        assertFalse(Boolean.TRUE.equals(status.get("isAtTaskOrigin")));
+    }
+
     private String standardD01StatusFrame() {
         return ""
                 + "5A545A4E2D505643" // ZTZN-PVC
@@ -156,5 +206,40 @@ class RailcarMessageServiceTest {
                 + "0000"
                 + "0000"             // backup3
                 + "0000";            // backup4
+    }
+
+    private String tVehicleStatusPayload() {
+        return "{"
+                + "\"company_code\":\"ZTZN-PVC\","
+                + "\"product_model\":\"-T01\","
+                + "\"product_id\":\"250002\","
+                + "\"timestamp\":1718600010,"
+                + "\"data\":{"
+                + "\"type\":\"vehicle_status\","
+                + "\"data\":{"
+                + "\"online_state\":\"ONLINE\","
+                + "\"mission_state\":\"IDLE\","
+                + "\"control_state\":\"READY\","
+                + "\"health_state\":\"NORMAL\","
+                + "\"fault_state\":\"NONE\","
+                + "\"battery\":86,"
+                + "\"speed\":0,"
+                + "\"brush_speed\":50,"
+                + "\"voltage\":48.5,"
+                + "\"lat\":31.123455,"
+                + "\"lon\":121.123455,"
+                + "\"heading\":180.0,"
+                + "\"task_name\":\"task001\","
+                + "\"cur_task_index\":0,"
+                + "\"task_count\":10,"
+                + "\"action\":\"idle\","
+                + "\"taskOrigin\":{\"lat\":31.123456,\"lon\":121.123456},"
+                + "\"currentLocation\":{\"lat\":31.123455,\"lon\":121.123455,\"heading\":180.0},"
+                + "\"distanceToTaskOriginM\":0.018,"
+                + "\"taskOriginToleranceM\":0.02,"
+                + "\"isAtTaskOrigin\":false"
+                + "}"
+                + "}"
+                + "}";
     }
 }

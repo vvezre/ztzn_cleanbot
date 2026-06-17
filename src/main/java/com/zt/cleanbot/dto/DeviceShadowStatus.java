@@ -42,6 +42,11 @@ public class DeviceShadowStatus implements Serializable {
     private Double voltage;
     private Double angle;
     private Long updatedAt;
+    private LocationData taskOrigin;
+    private CurrentLocationData currentLocation;
+    private Double distanceToTaskOriginM;
+    private Double taskOriginToleranceM;
+    private Boolean isAtTaskOrigin;
 
     private LocationData location;
     private List<String> supportedActions;
@@ -55,5 +60,14 @@ public class DeviceShadowStatus implements Serializable {
 
         private Double lon;
         private Double lat;
+    }
+
+    @Data
+    public static class CurrentLocationData implements Serializable {
+        private static final long serialVersionUID = 1L;
+
+        private Double lon;
+        private Double lat;
+        private Double heading;
     }
 }

@@ -32,6 +32,11 @@ public class VehicleRedisData {
     private Integer curTaskIndex;
     private Integer taskCount;
     private Long timestamp;
+    private LocationDTO taskOrigin;
+    private CurrentLocationDTO currentLocation;
+    private Double distanceToTaskOriginM;
+    private Double taskOriginToleranceM;
+    private Boolean isAtTaskOrigin;
 
     // ========== 工作模式参数 ==========
     private Integer runControl;      // 运行控制模式 (0-5)
@@ -99,5 +104,12 @@ public class VehicleRedisData {
     public static class LocationDTO {
         private Double lon;
         private Double lat;
+    }
+
+    @Data
+    public static class CurrentLocationDTO {
+        private Double lon;
+        private Double lat;
+        private Double heading;
     }
 }

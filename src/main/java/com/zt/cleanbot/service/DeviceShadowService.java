@@ -89,6 +89,11 @@ public class DeviceShadowService {
             shadow.setAngle(redisData.getAngle());
             shadow.setUpdatedAt(redisData.getLastUpdateTime());
             shadow.setLocation(buildLocation(redisData));
+            shadow.setTaskOrigin(buildTaskOrigin(redisData));
+            shadow.setCurrentLocation(buildCurrentLocation(redisData));
+            shadow.setDistanceToTaskOriginM(redisData.getDistanceToTaskOriginM());
+            shadow.setTaskOriginToleranceM(redisData.getTaskOriginToleranceM());
+            shadow.setIsAtTaskOrigin(redisData.getIsAtTaskOrigin());
         }
 
         shadow.setDeviceType(resolveDeviceType(shadow.getProductType()));
@@ -132,6 +137,27 @@ public class DeviceShadowService {
         DeviceShadowStatus.LocationData location = new DeviceShadowStatus.LocationData();
         location.setLon(redisData.getLocation().getLon());
         location.setLat(redisData.getLocation().getLat());
+        return location;
+    }
+
+    private DeviceShadowStatus.LocationData buildTaskOrigin(VehicleRedisData redisData) {
+        if (redisData == null || redisData.getTaskOrigin() == null) {
+            return null;
+        }
+        DeviceShadowStatus.LocationData location = new DeviceShadowStatus.LocationData();
+        location.setLon(redisData.getTaskOrigin().getLon());
+        location.setLat(redisData.getTaskOrigin().getLat());
+        return location;
+    }
+
+    private DeviceShadowStatus.CurrentLocationData buildCurrentLocation(VehicleRedisData redisData) {
+        if (redisData == null || redisData.getCurrentLocation() == null) {
+            return null;
+        }
+        DeviceShadowStatus.CurrentLocationData location = new DeviceShadowStatus.CurrentLocationData();
+        location.setLon(redisData.getCurrentLocation().getLon());
+        location.setLat(redisData.getCurrentLocation().getLat());
+        location.setHeading(redisData.getCurrentLocation().getHeading());
         return location;
     }
 
@@ -413,7 +439,12 @@ public class DeviceShadowService {
                     "right_edge",
                     "move_judge",
                     "detect_qrcode",
-                    "enter_garage"));
+                    "enter_garage",
+                    "task_origin",
+                    "current_location",
+                    "distance_to_task_origin_m",
+                    "task_origin_tolerance_m",
+                    "is_at_task_origin"));
         } else if ("-D12".equals(productType)) {
             fields.addAll(Arrays.asList(
                     "run_control",
@@ -450,12 +481,19 @@ public class DeviceShadowService {
     }
 
     private List<String> resolveSupportedStatusFields(String productType, VehicleRedisData redisData) {
+        List<String> defaults = resolveSupportedStatusFields(productType);
         if (redisData != null
                 && redisData.getSupportedStatusFields() != null
                 && !redisData.getSupportedStatusFields().isEmpty()) {
-            return redisData.getSupportedStatusFields();
+            List<String> merged = new ArrayList<String>(redisData.getSupportedStatusFields());
+            for (String field : defaults) {
+                if (!merged.contains(field)) {
+                    merged.add(field);
+                }
+            }
+            return merged;
         }
-        return resolveSupportedStatusFields(productType);
+        return defaults;
     }
 
     private Map<String, Object> buildDetail(
@@ -486,6 +524,11 @@ public class DeviceShadowService {
                 putIfNotNull(detail, "enter_garage", redisData.getEnterGarage());
                 putIfNotNull(detail, "voltage", redisData.getVoltage());
                 putIfNotNull(detail, "angle", redisData.getAngle());
+                putIfNotNull(detail, "task_origin", redisData.getTaskOrigin());
+                putIfNotNull(detail, "current_location", redisData.getCurrentLocation());
+                putIfNotNull(detail, "distance_to_task_origin_m", redisData.getDistanceToTaskOriginM());
+                putIfNotNull(detail, "task_origin_tolerance_m", redisData.getTaskOriginToleranceM());
+                putIfNotNull(detail, "is_at_task_origin", redisData.getIsAtTaskOrigin());
                 putIfNotNull(detail, "last_command_id", redisData.getLastCommandId());
                 putIfNotNull(detail, "last_trace_id", redisData.getLastTraceId());
                 putIfNotNull(detail, "last_command", redisData.getLastCommand());

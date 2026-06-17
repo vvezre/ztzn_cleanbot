@@ -142,6 +142,11 @@ public class DeviceStatusPublisher {
                 notification.put("taskName", toStringValue(redisData.get("taskName")));
                 notification.put("curTaskIndex", toInteger(redisData.get("curTaskIndex")));
                 notification.put("taskCount", toInteger(redisData.get("taskCount")));
+                notification.put("taskOrigin", redisData.get("taskOrigin"));
+                notification.put("currentLocation", redisData.get("currentLocation"));
+                notification.put("distanceToTaskOriginM", toDouble(redisData.get("distanceToTaskOriginM")));
+                notification.put("taskOriginToleranceM", toDouble(redisData.get("taskOriginToleranceM")));
+                notification.put("isAtTaskOrigin", toBoolean(redisData.get("isAtTaskOrigin")));
                 notification.put("tracking", toBoolean(redisData.get("tracking")));
                 notification.put("pathPlanning", toStringValue(redisData.get("pathPlanning")));
                 notification.put("lastCommandId", toStringValue(redisData.get("lastCommandId")));

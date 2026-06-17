@@ -427,6 +427,11 @@ public class MiniAppDeviceController {
                 response.setCurTaskIndex(redisData.getCurTaskIndex());
                 response.setTaskCount(redisData.getTaskCount());
                 response.setTimestamp(redisData.getTimestamp() != null ? redisData.getTimestamp() : redisData.getLastUpdateTime());
+                response.setTaskOrigin(toMiniAppLocation(redisData.getTaskOrigin()));
+                response.setCurrentLocation(toMiniAppCurrentLocation(redisData.getCurrentLocation()));
+                response.setDistanceToTaskOriginM(redisData.getDistanceToTaskOriginM());
+                response.setTaskOriginToleranceM(redisData.getTaskOriginToleranceM());
+                response.setIsAtTaskOrigin(redisData.getIsAtTaskOrigin());
                 response.setTracking(redisData.getTracking());
                 response.setPathPlanning(redisData.getPathPlanning());
                 response.setLeftEdge(redisData.getLeftEdge());
@@ -756,6 +761,11 @@ public class MiniAppDeviceController {
         response.setCurTaskIndex(null);
         response.setTaskCount(null);
         response.setTimestamp(null);
+        response.setTaskOrigin(null);
+        response.setCurrentLocation(null);
+        response.setDistanceToTaskOriginM(null);
+        response.setTaskOriginToleranceM(null);
+        response.setIsAtTaskOrigin(null);
         response.setTracking(null);
         response.setPathPlanning(null);
         response.setLeftEdge(null);
@@ -827,6 +837,28 @@ public class MiniAppDeviceController {
             return null;
         }
         return detail.get(key);
+    }
+
+    private MiniAppRobotResponse.LocationData toMiniAppLocation(VehicleRedisData.LocationDTO source) {
+        if (source == null) {
+            return null;
+        }
+        MiniAppRobotResponse.LocationData location = new MiniAppRobotResponse.LocationData();
+        location.setLon(source.getLon());
+        location.setLat(source.getLat());
+        return location;
+    }
+
+    private MiniAppRobotResponse.CurrentLocationData toMiniAppCurrentLocation(
+            VehicleRedisData.CurrentLocationDTO source) {
+        if (source == null) {
+            return null;
+        }
+        MiniAppRobotResponse.CurrentLocationData location = new MiniAppRobotResponse.CurrentLocationData();
+        location.setLon(source.getLon());
+        location.setLat(source.getLat());
+        location.setHeading(source.getHeading());
+        return location;
     }
 
     private String mapShadowToLegacyStatus(DeviceShadowStatus shadow) {
