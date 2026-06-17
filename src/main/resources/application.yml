@@ -1,0 +1,74 @@
+server:
+  port: 9798
+
+spring:
+  application:
+    name: cleanbot
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://localhost:3306/pvcleaning?useSSL=false&serverTimezone=Asia/Shanghai&characterEncoding=utf8
+    username: root
+    # 使用环境变量配置密码，避免将敏感信息提交到代码仓库
+    # 方式1: 启动时添加 -DMYSQL_PASSWORD=your_password
+    # 方式2: 在系统环境变量中设置 MYSQL_PASSWORD
+    password: ${MYSQL_PASSWORD:root}
+  redis:
+    host: localhost
+    port: 6379
+    password:  # 如果没有密码就不填
+    database: 0
+    timeout: 3000ms
+    lettuce:
+      pool:
+        max-active: 8
+        max-wait: -1ms
+        max-idle: 8
+        min-idle: 0
+
+# MyBatis Plus 配置
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true  # 下划线转驼峰
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl  # 打印SQL日志
+  global-config:
+    db-config:
+      id-type: auto  # 主键自增
+      logic-delete-field: deleted  # 逻辑删除字段
+      logic-delete-value: 1  # 删除值
+      logic-not-delete-value: 0  # 未删除值
+
+
+#mqtt:
+#  broker-url: tcp://localhost:1883
+#  username: admin  # 默认没有密码，如果设置了请填写
+#  password: a12345678
+#  client-id: spring-boot-app-${random.uuid}
+
+mqtt:
+  broker-url: tcp://218.2.130.246:1883
+  username:   # 默认没有密码，如果设置了请填写
+  password:
+  client-id: spring-boot-app-${random.uuid}
+
+
+# JWT 配置
+jwt:
+  secret: ${JWT_SECRET:Y2xlYW5ib3Qtc2VjcmV0LWtleS1taW4tMjU2LWJpdHMtbG9uZy1mb3Itc2VjdXJpdHk=}
+  expiration: 3600000      # Access token: 1小时 (单位: 毫秒)
+  refresh-expiration: 604800000  # Refresh token: 7天
+  header: Authorization
+  token-prefix: Bearer
+
+# DeepSeek AI 配置
+deepseek:
+  api-key: ${DEEPSEEK_API_KEY:sk-f68523db5ea640e39ed846c698af63b1}
+  base-url: https://api.deepseek.com
+  model: deepseek-chat
+  # 对话上下文保留轮数（每轮 = 1条user + 1条assistant）
+  max-history-rounds: 10
+
+# 日志配置
+logging:
+  level:
+    com.zt.cleanbot: debug
+    com.baomidou.mybatisplus: debug

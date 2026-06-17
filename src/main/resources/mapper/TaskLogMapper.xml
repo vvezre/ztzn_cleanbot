@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.zt.cleanbot.dao.TaskLogMapper">
+
+    <resultMap id="CityTaskStatsDTOMap" type="com.zt.cleanbot.dto.CityTaskStatsDTO">
+        <result property="cityCode" column="cityCode"/>
+        <result property="cityName" column="cityName"/>
+        <result property="totalTasks" column="totalTasks"/>
+        <result property="successTasks" column="successTasks"/>
+        <result property="completionRate" column="completionRate"/>
+    </resultMap>
+
+    <select id="selectCityTaskStats" resultMap="CityTaskStatsDTOMap">
+        SELECT
+            city_region.code as cityCode,
+            city_region.name as cityName,
+            COUNT(tl.id) as totalTasks,
+            SUM(CASE WHEN tl.status = 'success' THEN 1 ELSE 0 END) as successTasks,
+            CASE
+                WHEN COUNT(tl.id) = 0 THEN 0
+                ELSE ROUND(SUM(CASE WHEN tl.status = 'success' THEN 1 ELSE 0 END) * 100.0 / COUNT(tl.id), 2)
+                END as completionRate
+        FROM task_log tl
+                 INNER JOIN clean_area ca ON tl.area_id = ca.id
+                 INNER JOIN region city_region ON SUBSTRING(ca.region_code, 1, 4) = SUBSTRING(city_region.code, 1, 4)
+            AND city_region.level = 2
+        WHERE DATE(tl.start_time) BETWEEN DATE(#{startDate}) AND DATE(#{endDate})
+        GROUP BY city_region.code, city_region.name
+        ORDER BY totalTasks DESC
+    </select>
+
+
+
+    <!-- 添加缺失的 MonthlyFailStatsDTOMap -->
+    <resultMap id="MonthlyFailStatsDTOMap" type="com.zt.cleanbot.dto.MonthlyFailStatsDTO">
+        <result property="yearMonth" column="yearMonth"/>
+        <result property="totalTasks" column="totalTasks"/>
+        <result property="failTasks" column="failTasks"/>
+        <result property="failRate" column="failRate"/>
+    </resultMap>
+
+    <select id="selectMonthlyFailStats" resultMap="MonthlyFailStatsDTOMap">
+        SELECT
+            DATE_FORMAT(DATE_SUB(CURDATE(), INTERVAL (5 - n.num) MONTH), '%Y-%m') as yearMonth,
+            COUNT(tl.id) as totalTasks,
+            SUM(CASE WHEN tl.status = 'fail' THEN 1 ELSE 0 END) as failTasks,
+            CASE
+                WHEN COUNT(tl.id) = 0 THEN 0
+                ELSE ROUND(SUM(CASE WHEN tl.status = 'fail' THEN 1 ELSE 0 END) * 100.0 / COUNT(tl.id), 2)
+                END as failRate
+        FROM (
+                 SELECT 0 as num UNION ALL SELECT 1 UNION ALL SELECT 2
+                 UNION ALL SELECT 3 UNION ALL SELECT 4 UNION ALL SELECT 5
+             ) n
+                 LEFT JOIN task_log tl ON DATE_FORMAT(tl.start_time, '%Y-%m') = DATE_FORMAT(DATE_SUB(CURDATE(), INTERVAL (5 - n.num) MONTH), '%Y-%m')
+        GROUP BY yearMonth
+        ORDER BY yearMonth
+    </select>
+
+    <!-- 修改 CityTaskRankDTO 的 resultMap -->
+    <resultMap id="CityTaskRankDTOMap" type="com.zt.cleanbot.dto.CityTaskRankDTO">
+        <result property="cityCode" column="cityCode"/>
+        <result property="cityName" column="cityName"/>
+        <result property="totalTasks" column="totalTasks"/>
+        <result property="successTasks" column="successTasks"/>
+    </resultMap>
+
+    <!-- 修改：当前月市级任务成功数量排名前十 -->
+    <select id="selectCityTaskRankCurrentMonth" resultMap="CityTaskRankDTOMap">
+        SELECT
+            city_region.code as cityCode,
+            city_region.name as cityName,
+            COUNT(tl.id) as totalTasks,
+            SUM(CASE WHEN tl.status = 'success' THEN 1 ELSE 0 END) as successTasks
+        FROM task_log tl
+                 INNER JOIN clean_area ca ON tl.area_id = ca.id
+                 INNER JOIN region city_region ON SUBSTRING(ca.region_code, 1, 4) = SUBSTRING(city_region.code, 1, 4)
+            AND city_region.level = 2
+        WHERE DATE_FORMAT(tl.start_time, '%Y-%m') = DATE_FORMAT(CURDATE(), '%Y-%m')
+        GROUP BY city_region.code, city_region.name
+        ORDER BY successTasks DESC, totalTasks DESC
+            LIMIT 10
+    </select>
+
+</mapper>

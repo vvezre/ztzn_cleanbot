@@ -1,0 +1,54 @@
+server:
+  port: 9798
+
+spring:
+  application:
+    name: cleanbot
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://localhost:3306/pvcleaning?useSSL=false&serverTimezone=Asia/Shanghai&characterEncoding=utf8
+    username: root
+    # 使用环境变量，启动时通过 -DMYSQL_PASSWORD=your_password 指定
+    password: ${MYSQL_PASSWORD:123456}
+  redis:
+    host: localhost
+    port: 6379
+    password:  # 如果没有密码就不填
+    database: 0
+    timeout: 3000ms
+    lettuce:
+      pool:
+        max-active: 8
+        max-wait: -1ms
+        max-idle: 8
+        min-idle: 0
+
+# MyBatis Plus 配置
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+  global-config:
+    db-config:
+      id-type: auto
+      logic-delete-field: deleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+
+mqtt:
+  broker-url: ${MQTT_BROKER_URL:tcp://127.0.0.1:1883}
+  username:
+  password:
+  client-id: spring-boot-app-${random.uuid}
+  embedded-broker:
+    enabled: true
+    host: 127.0.0.1
+    port: 1883
+
+# JWT 配置
+jwt:
+  secret: ${JWT_SECRET:Y2xlYW5ib3Qtc2VjcmV0LWtleS1taW4tMjU2LWJpdHMtbG9uZy1mb3Itc2VjdXJpdHk=}
+  expiration: 3600000
+  refresh-expiration: 604800000
+  header: Authorization
+  token-prefix: Bearer
