@@ -69,6 +69,10 @@ public class TRailcarControlService {
         }
 
         try {
+            if ("get_modeling_path".equals(command)) {
+                Object modelId = request.getParams().get("modelId");
+                redisUtil.delete("modeling_path:" + deviceId + ":" + String.valueOf(modelId));
+            }
             log.info("准备发送T型号小车控制命令 - traceId: {}, commandId: {}, 设备: {}, 命令: {}, 参数: {}",
                     traceId, commandId, deviceId, command, request.getParams());
 
@@ -116,6 +120,19 @@ public class TRailcarControlService {
     public Map<String, Object> getCachedTaskPath(String productId) {
         String deviceId = "-T01" + productId;
         Object cached = redisUtil.get("task_path:" + deviceId);
+        if (cached == null) {
+            return null;
+        }
+        if (cached instanceof Map) {
+            return (Map<String, Object>) cached;
+        }
+        return objectMapper.convertValue(cached, Map.class);
+    }
+
+    @SuppressWarnings("unchecked")
+    public Map<String, Object> getCachedModelingPath(String productId, String modelId) {
+        String deviceId = "-T01" + productId;
+        Object cached = redisUtil.get("modeling_path:" + deviceId + ":" + modelId);
         if (cached == null) {
             return null;
         }
@@ -217,6 +234,13 @@ public class TRailcarControlService {
             Object taskName = params == null ? null : params.get("taskName");
             if (taskName == null || String.valueOf(taskName).trim().isEmpty()) {
                 return command + " command requires non-empty taskName";
+            }
+        }
+
+        if ("get_modeling_path".equals(command)) {
+            Object modelId = params == null ? null : params.get("modelId");
+            if (modelId == null || !String.valueOf(modelId).matches("[A-Za-z0-9_-]+")) {
+                return "get_modeling_path command requires valid modelId";
             }
         }
 
@@ -329,6 +353,7 @@ public class TRailcarControlService {
             case "exit_garage":
             case "get_status":
             case "get_task_path":
+            case "get_modeling_path":
                 // 这些命令不需要参数
                 break;
 

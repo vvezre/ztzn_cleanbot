@@ -182,6 +182,35 @@ public class RailcarMessageService {
                 return;
             }
 
+            if ("vehicle_position".equals(messageType)) {
+                JsonNode positionNode = dataNode.path("data");
+                if (positionNode.isMissingNode() || positionNode.isNull()) {
+                    log.warn("Railcar position event has no data: {}", serialNumber);
+                    return;
+                }
+
+                Integer localX = readInt(positionNode, "local_x");
+                Integer localY = readInt(positionNode, "local_y");
+                if (localX == null || localY == null) {
+                    log.warn("Railcar position event has invalid coordinates: {}", serialNumber);
+                    return;
+                }
+
+                Map<String, Object> redisData = getExistingRedisData(serialNumber);
+                redisData.put("deviceId", serialNumber);
+                redisData.put("localX", localX);
+                redisData.put("localY", localY);
+                redisData.put("lastUpdateTime", parseTRailcarUpdateTime(root, positionNode));
+
+                boolean success = redisUtil.setVehicle(serialNumber, redisData, REDIS_EXPIRE_TIME, TimeUnit.SECONDS);
+                if (success) {
+                    deviceStatusPublisher.publishDeviceStatus(serialNumber, redisData);
+                } else {
+                    log.error("Railcar position event persistence failed: {}", serialNumber);
+                }
+                return;
+            }
+
             if ("online".equals(messageType) || "offline".equals(messageType)) {
                 Map<String, Object> redisData = getExistingRedisData(serialNumber);
                 redisData.put("deviceId", serialNumber);
@@ -208,6 +237,7 @@ public class RailcarMessageService {
                 applyCommandTracking(redisData, dataNode, messageType);
                 updateCommandSnapshot(serialNumber, dataNode, messageType);
                 cacheTaskPathIfPresent(serialNumber, dataNode, messageType);
+                cacheModelingPathIfPresent(serialNumber, dataNode, messageType);
 
                 boolean success = redisUtil.setVehicle(serialNumber, redisData, REDIS_EXPIRE_TIME, TimeUnit.SECONDS);
                 if (success) {
@@ -526,6 +556,35 @@ public class RailcarMessageService {
             cachedPath.put("updatedAt", System.currentTimeMillis());
         }
         redisUtil.set("task_path:" + serialNumber, cachedPath, 24, TimeUnit.HOURS);
+    }
+
+    private void cacheModelingPathIfPresent(String serialNumber, JsonNode dataNode, String messageType) {
+        if (!"command_result".equals(messageType)) {
+            return;
+        }
+        String command = readText(dataNode, "command");
+        if (!"get_modeling_path".equals(command)) {
+            return;
+        }
+        JsonNode resultNode = dataNode.path("result");
+        if (!resultNode.path("success").asBoolean(false)) {
+            return;
+        }
+        JsonNode pathDataNode = resultNode.path("data");
+        if (pathDataNode.isMissingNode() || pathDataNode.isNull()) {
+            return;
+        }
+        String modelId = readText(pathDataNode, "modelId");
+        if (modelId == null || !modelId.matches("[A-Za-z0-9_-]+")) {
+            return;
+        }
+
+        Map<String, Object> cachedPath = objectMapper.convertValue(pathDataNode, Map.class);
+        cachedPath.put("deviceId", serialNumber);
+        if (!cachedPath.containsKey("updatedAt")) {
+            cachedPath.put("updatedAt", System.currentTimeMillis());
+        }
+        redisUtil.set("modeling_path:" + serialNumber + ":" + modelId, cachedPath, 24, TimeUnit.HOURS);
     }
 
     private void updateCommandSnapshot(String serialNumber, JsonNode dataNode, String messageType) {

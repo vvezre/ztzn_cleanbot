@@ -156,6 +156,48 @@ public class TRailcarController {
         return ResponseEntity.ok(response);
     }
 
+    @GetMapping("/modeling-path/{productId}")
+    public ResponseEntity<Map<String, Object>> getModelingPath(
+            @PathVariable String productId,
+            @RequestParam String modelId,
+            HttpServletRequest httpRequest) {
+        Integer userId = (Integer) httpRequest.getAttribute("userId");
+        Integer roleId = (Integer) httpRequest.getAttribute("roleId");
+        String deviceId = "-T01" + productId;
+        Map<String, Object> response = new LinkedHashMap<>();
+
+        if (userId == null) {
+            response.put("success", false);
+            response.put("message", "not logged in");
+            response.put("data", null);
+            return ResponseEntity.status(401).body(response);
+        }
+        if (!vehicleService.hasDeviceAccess(userId, roleId, deviceId)) {
+            response.put("success", false);
+            response.put("message", "permission denied");
+            response.put("data", null);
+            return ResponseEntity.status(403).body(response);
+        }
+        if (modelId == null || !modelId.matches("[A-Za-z0-9_-]+")) {
+            response.put("success", false);
+            response.put("message", "invalid modelId");
+            response.put("data", null);
+            return ResponseEntity.badRequest().body(response);
+        }
+
+        Map<String, Object> cachedPath = tRailcarControlService.getCachedModelingPath(productId, modelId);
+        if (cachedPath == null) {
+            response.put("success", false);
+            response.put("message", "modeling path is not ready");
+            response.put("data", null);
+            return ResponseEntity.ok(response);
+        }
+        response.put("success", true);
+        response.put("message", "modeling path fetched");
+        response.put("data", cachedPath);
+        return ResponseEntity.ok(response);
+    }
+
     @GetMapping("/tasks/{productId}")
     public ResponseEntity<Map<String, Object>> getTaskOptions(
             @PathVariable String productId,

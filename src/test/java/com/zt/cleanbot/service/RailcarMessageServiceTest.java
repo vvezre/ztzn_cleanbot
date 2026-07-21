@@ -9,6 +9,7 @@ import org.mockito.ArgumentCaptor;
 import org.springframework.messaging.MessageChannel;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
@@ -24,6 +25,43 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class RailcarMessageServiceTest {
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void shouldMergeAndPublishRealtimeRelativePosition() {
+        ObjectMapper objectMapper = new ObjectMapper();
+        RailcarMessageService service = new RailcarMessageService(objectMapper);
+
+        VehicleService vehicleService = mock(VehicleService.class);
+        RedisUtil redisUtil = mock(RedisUtil.class);
+        DeviceStatusPublisher deviceStatusPublisher = mock(DeviceStatusPublisher.class);
+
+        Vehicle vehicle = new Vehicle();
+        vehicle.setSerialNumber("-T01250002");
+        when(vehicleService.getBySerialNumber("-T01250002")).thenReturn(vehicle);
+        Map<String, Object> existing = new HashMap<>();
+        existing.put("status", "working");
+        when(redisUtil.getVehicle("-T01250002")).thenReturn(existing);
+        when(redisUtil.setVehicle(eq("-T01250002"), any(), anyLong(), eq(TimeUnit.SECONDS))).thenReturn(true);
+
+        ReflectionTestUtils.setField(service, "vehicleService", vehicleService);
+        ReflectionTestUtils.setField(service, "redisUtil", redisUtil);
+        ReflectionTestUtils.setField(service, "deviceStatusPublisher", deviceStatusPublisher);
+
+        service.handleTRailcarStatus("-T01250002", "{"
+                + "\"timestamp\":1718600011,"
+                + "\"data\":{\"type\":\"vehicle_position\","
+                + "\"data\":{\"local_x\":123,\"local_y\":456}}}");
+
+        ArgumentCaptor<Object> redisPayload = ArgumentCaptor.forClass(Object.class);
+        verify(redisUtil).setVehicle(eq("-T01250002"), redisPayload.capture(), eq(86400L), eq(TimeUnit.SECONDS));
+        verify(deviceStatusPublisher).publishDeviceStatus(eq("-T01250002"), any(Map.class));
+
+        Map<String, Object> status = (Map<String, Object>) redisPayload.getValue();
+        assertEquals("working", status.get("status"));
+        assertEquals(123, status.get("localX"));
+        assertEquals(456, status.get("localY"));
+    }
 
     @Test
     @SuppressWarnings("unchecked")
