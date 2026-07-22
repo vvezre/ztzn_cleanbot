@@ -563,7 +563,7 @@ public class RailcarMessageService {
             return;
         }
         String command = readText(dataNode, "command");
-        if (!"get_modeling_path".equals(command)) {
+        if (!"get_modeling_path".equals(command) && !"finish_modeling".equals(command)) {
             return;
         }
         JsonNode resultNode = dataNode.path("result");

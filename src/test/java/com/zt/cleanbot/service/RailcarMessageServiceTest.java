@@ -241,6 +241,51 @@ class RailcarMessageServiceTest {
         assertEquals(1, point.get("sequence"));
     }
 
+    @Test
+    void shouldCachePathReturnedByFinishModeling() {
+        ObjectMapper objectMapper = new ObjectMapper();
+        RailcarMessageService service = new RailcarMessageService(objectMapper);
+
+        VehicleService vehicleService = mock(VehicleService.class);
+        RedisUtil redisUtil = mock(RedisUtil.class);
+        DeviceStatusPublisher deviceStatusPublisher = mock(DeviceStatusPublisher.class);
+        CommandStatusService commandStatusService = mock(CommandStatusService.class);
+
+        Vehicle vehicle = new Vehicle();
+        vehicle.setSerialNumber("-T01250002");
+        when(vehicleService.getBySerialNumber("-T01250002")).thenReturn(vehicle);
+        when(redisUtil.getVehicle("-T01250002")).thenReturn(new HashMap<String, Object>());
+        when(redisUtil.setVehicle(eq("-T01250002"), any(), anyLong(), eq(TimeUnit.SECONDS))).thenReturn(true);
+
+        ReflectionTestUtils.setField(service, "vehicleService", vehicleService);
+        ReflectionTestUtils.setField(service, "redisUtil", redisUtil);
+        ReflectionTestUtils.setField(service, "deviceStatusPublisher", deviceStatusPublisher);
+        ReflectionTestUtils.setField(service, "commandStatusService", commandStatusService);
+
+        service.handleTRailcarStatus("-T01250002", "{"
+                + "\"timestamp\":1718600011,"
+                + "\"data\":{"
+                + "\"type\":\"command_result\","
+                + "\"command_id\":\"cmd-finish-1\","
+                + "\"command\":\"finish_modeling\","
+                + "\"result\":{"
+                + "\"success\":true,"
+                + "\"message\":\"modeling path generated\","
+                + "\"data\":{"
+                + "\"modelId\":\"model-1\","
+                + "\"taskPlan\":{\"status\":\"ready\",\"tasks\":[]}"
+                + "}"
+                + "}"
+                + "}"
+                + "}");
+
+        verify(redisUtil).set(
+                eq("modeling_path:-T01250002:model-1"),
+                any(),
+                eq(24L),
+                eq(TimeUnit.HOURS));
+    }
+
     private String standardD01StatusFrame() {
         return ""
                 + "5A545A4E2D505643" // ZTZN-PVC

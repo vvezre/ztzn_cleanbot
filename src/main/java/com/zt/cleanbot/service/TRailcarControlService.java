@@ -69,9 +69,11 @@ public class TRailcarControlService {
         }
 
         try {
-            if ("get_modeling_path".equals(command)) {
+            if ("get_modeling_path".equals(command) && request.getParams() != null) {
                 Object modelId = request.getParams().get("modelId");
-                redisUtil.delete("modeling_path:" + deviceId + ":" + String.valueOf(modelId));
+                if (modelId != null && !String.valueOf(modelId).trim().isEmpty()) {
+                    redisUtil.delete("modeling_path:" + deviceId + ":" + String.valueOf(modelId));
+                }
             }
             log.info("准备发送T型号小车控制命令 - traceId: {}, commandId: {}, 设备: {}, 命令: {}, 参数: {}",
                     traceId, commandId, deviceId, command, request.getParams());
@@ -239,30 +241,41 @@ public class TRailcarControlService {
 
         if ("get_modeling_path".equals(command)) {
             Object modelId = params == null ? null : params.get("modelId");
-            if (modelId == null || !String.valueOf(modelId).matches("[A-Za-z0-9_-]+")) {
-                return "get_modeling_path command requires valid modelId";
+            if (modelId != null && !String.valueOf(modelId).matches("[A-Za-z0-9_-]+")) {
+                return "get_modeling_path command requires valid modelId when provided";
             }
         }
 
         if ("sample_modeling_point".equals(command)) {
             Object modelId = params == null ? null : params.get("modelId");
             Object groupId = params == null ? null : params.get("groupId");
-            if (modelId == null || !String.valueOf(modelId).matches("[A-Za-z0-9_-]+")) {
-                return "sample_modeling_point command requires valid modelId";
+            if ((modelId == null) != (groupId == null)) {
+                return "sample_modeling_point command requires both modelId and groupId when identifiers are provided";
             }
-            if (groupId == null || !String.valueOf(groupId).matches("[A-Za-z0-9_-]+")) {
-                return "sample_modeling_point command requires valid groupId";
+            if (modelId != null && (!String.valueOf(modelId).matches("[A-Za-z0-9_-]+")
+                    || !String.valueOf(groupId).matches("[A-Za-z0-9_-]+"))) {
+                return "sample_modeling_point command identifiers are invalid";
             }
         }
 
         if ("sample_modeling_link_point".equals(command)) {
             Object modelId = params == null ? null : params.get("modelId");
             Object linkId = params == null ? null : params.get("linkId");
-            if (modelId == null || !String.valueOf(modelId).matches("[A-Za-z0-9_-]+")) {
-                return "sample_modeling_link_point command requires valid modelId";
+            if ((modelId == null) != (linkId == null)) {
+                return "sample_modeling_link_point command requires both modelId and linkId when identifiers are provided";
             }
-            if (linkId == null || !String.valueOf(linkId).matches("[A-Za-z0-9_-]+")) {
-                return "sample_modeling_link_point command requires valid linkId";
+            if (modelId != null && (!String.valueOf(modelId).matches("[A-Za-z0-9_-]+")
+                    || !String.valueOf(linkId).matches("[A-Za-z0-9_-]+"))) {
+                return "sample_modeling_link_point command identifiers are invalid";
+            }
+        }
+
+        if ("undo_modeling_point".equals(command) || "clear_modeling_points".equals(command)) {
+            Object pointType = params == null ? null : params.get("pointType");
+            if (pointType != null
+                    && !"area".equals(String.valueOf(pointType))
+                    && !"link".equals(String.valueOf(pointType))) {
+                return command + " command pointType must be area or link";
             }
         }
 
@@ -337,6 +350,13 @@ public class TRailcarControlService {
 
             case "sample_modeling_link_point":
                 // modelId and linkId are validated above.
+                break;
+
+            case "start_modeling":
+            case "finish_modeling":
+            case "get_modeling_state":
+            case "undo_modeling_point":
+            case "clear_modeling_points":
                 break;
 
             case "save_params":

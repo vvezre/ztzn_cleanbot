@@ -20,13 +20,13 @@ class TRailcarControlServiceModelingPathTest {
     }
 
     @Test
-    void rejectsModelingPathCommandWithoutValidModelId() {
+    void acceptsCurrentModelingPathWithoutModelIdAndRejectsInvalidProvidedId() {
         TRailcarControlService service = new TRailcarControlService();
         Map<String, Object> params = new LinkedHashMap<>();
         params.put("modelId", "../bad");
 
         assertNotNull(service.validateCommand("get_modeling_path", params));
-        assertNotNull(service.validateCommand("get_modeling_path", null));
+        assertNull(service.validateCommand("get_modeling_path", null));
     }
 
     @Test
@@ -40,7 +40,7 @@ class TRailcarControlServiceModelingPathTest {
     }
 
     @Test
-    void rejectsModelingPointCommandWithoutValidIdentifiers() {
+    void acceptsCurrentSessionPointAndRejectsPartialOrInvalidIdentifiers() {
         TRailcarControlService service = new TRailcarControlService();
         Map<String, Object> missingGroup = new LinkedHashMap<>();
         missingGroup.put("modelId", "model-1");
@@ -50,7 +50,7 @@ class TRailcarControlServiceModelingPathTest {
 
         assertNotNull(service.validateCommand("sample_modeling_point", missingGroup));
         assertNotNull(service.validateCommand("sample_modeling_point", invalidModel));
-        assertNotNull(service.validateCommand("sample_modeling_point", null));
+        assertNull(service.validateCommand("sample_modeling_point", null));
     }
 
     @Test
@@ -64,7 +64,7 @@ class TRailcarControlServiceModelingPathTest {
     }
 
     @Test
-    void rejectsModelingLinkPointCommandWithoutValidIdentifiers() {
+    void acceptsCurrentSessionLinkPointAndRejectsPartialOrInvalidIdentifiers() {
         TRailcarControlService service = new TRailcarControlService();
         Map<String, Object> missingLink = new LinkedHashMap<>();
         missingLink.put("modelId", "model-1");
@@ -74,6 +74,25 @@ class TRailcarControlServiceModelingPathTest {
 
         assertNotNull(service.validateCommand("sample_modeling_link_point", missingLink));
         assertNotNull(service.validateCommand("sample_modeling_link_point", invalidLink));
-        assertNotNull(service.validateCommand("sample_modeling_link_point", null));
+        assertNull(service.validateCommand("sample_modeling_link_point", null));
+    }
+
+    @Test
+    void acceptsModelingSessionLifecycleCommands() {
+        TRailcarControlService service = new TRailcarControlService();
+
+        assertNull(service.validateCommand("start_modeling", null));
+        assertNull(service.validateCommand("finish_modeling", null));
+        assertNull(service.validateCommand("get_modeling_state", null));
+        assertNull(service.validateCommand("undo_modeling_point", null));
+        assertNull(service.validateCommand("clear_modeling_points", null));
+
+        Map<String, Object> area = new LinkedHashMap<>();
+        area.put("pointType", "area");
+        assertNull(service.validateCommand("undo_modeling_point", area));
+
+        Map<String, Object> invalid = new LinkedHashMap<>();
+        invalid.put("pointType", "boundary");
+        assertNotNull(service.validateCommand("clear_modeling_points", invalid));
     }
 }
