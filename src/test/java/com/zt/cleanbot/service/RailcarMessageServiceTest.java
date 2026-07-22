@@ -184,6 +184,63 @@ class RailcarMessageServiceTest {
         assertFalse(Boolean.TRUE.equals(status.get("isAtTaskOrigin")));
     }
 
+    @Test
+    @SuppressWarnings("unchecked")
+    void shouldExposeRecordedModelingPointInCommandStatusResult() {
+        ObjectMapper objectMapper = new ObjectMapper();
+        RailcarMessageService service = new RailcarMessageService(objectMapper);
+
+        VehicleService vehicleService = mock(VehicleService.class);
+        RedisUtil redisUtil = mock(RedisUtil.class);
+        DeviceStatusPublisher deviceStatusPublisher = mock(DeviceStatusPublisher.class);
+        CommandStatusService commandStatusService = mock(CommandStatusService.class);
+
+        Vehicle vehicle = new Vehicle();
+        vehicle.setSerialNumber("-T01250002");
+        when(vehicleService.getBySerialNumber("-T01250002")).thenReturn(vehicle);
+        when(redisUtil.getVehicle("-T01250002")).thenReturn(new HashMap<String, Object>());
+        when(redisUtil.setVehicle(eq("-T01250002"), any(), anyLong(), eq(TimeUnit.SECONDS))).thenReturn(true);
+
+        ReflectionTestUtils.setField(service, "vehicleService", vehicleService);
+        ReflectionTestUtils.setField(service, "redisUtil", redisUtil);
+        ReflectionTestUtils.setField(service, "deviceStatusPublisher", deviceStatusPublisher);
+        ReflectionTestUtils.setField(service, "commandStatusService", commandStatusService);
+
+        service.handleTRailcarStatus("-T01250002", "{"
+                + "\"timestamp\":1718600011,"
+                + "\"data\":{"
+                + "\"type\":\"command_result\","
+                + "\"command_id\":\"cmd-sample-1\","
+                + "\"trace_id\":\"trace-sample-1\","
+                + "\"command\":\"sample_modeling_point\","
+                + "\"result\":{"
+                + "\"success\":true,"
+                + "\"message\":\"modeling point recorded\","
+                + "\"data\":{"
+                + "\"modelId\":\"model-1\","
+                + "\"groupId\":\"group-1\","
+                + "\"point\":{\"id\":\"p1\",\"sequence\":1,\"lat\":32.0364,\"lon\":118.1234}"
+                + "}"
+                + "}"
+                + "}"
+                + "}");
+
+        ArgumentCaptor<Map> detailCaptor = ArgumentCaptor.forClass(Map.class);
+        verify(commandStatusService).markSucceeded(
+                eq("cmd-sample-1"),
+                eq("modeling point recorded"),
+                detailCaptor.capture());
+
+        Map<String, Object> detail = (Map<String, Object>) detailCaptor.getValue();
+        Map<String, Object> result = (Map<String, Object>) detail.get("result");
+        Map<String, Object> data = (Map<String, Object>) result.get("data");
+        Map<String, Object> point = (Map<String, Object>) data.get("point");
+        assertEquals("model-1", data.get("modelId"));
+        assertEquals("group-1", data.get("groupId"));
+        assertEquals("p1", point.get("id"));
+        assertEquals(1, point.get("sequence"));
+    }
+
     private String standardD01StatusFrame() {
         return ""
                 + "5A545A4E2D505643" // ZTZN-PVC

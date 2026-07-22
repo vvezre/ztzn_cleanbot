@@ -244,6 +244,28 @@ public class TRailcarControlService {
             }
         }
 
+        if ("sample_modeling_point".equals(command)) {
+            Object modelId = params == null ? null : params.get("modelId");
+            Object groupId = params == null ? null : params.get("groupId");
+            if (modelId == null || !String.valueOf(modelId).matches("[A-Za-z0-9_-]+")) {
+                return "sample_modeling_point command requires valid modelId";
+            }
+            if (groupId == null || !String.valueOf(groupId).matches("[A-Za-z0-9_-]+")) {
+                return "sample_modeling_point command requires valid groupId";
+            }
+        }
+
+        if ("sample_modeling_link_point".equals(command)) {
+            Object modelId = params == null ? null : params.get("modelId");
+            Object linkId = params == null ? null : params.get("linkId");
+            if (modelId == null || !String.valueOf(modelId).matches("[A-Za-z0-9_-]+")) {
+                return "sample_modeling_link_point command requires valid modelId";
+            }
+            if (linkId == null || !String.valueOf(linkId).matches("[A-Za-z0-9_-]+")) {
+                return "sample_modeling_link_point command requires valid linkId";
+            }
+        }
+
         switch (command) {
             case "drive":
             case "back":
@@ -307,6 +329,14 @@ public class TRailcarControlService {
                 if (params == null || !params.containsKey("taskName")) {
                     return command + "命令需要参数：taskName";
                 }
+                break;
+
+            case "sample_modeling_point":
+                // modelId and groupId are validated above.
+                break;
+
+            case "sample_modeling_link_point":
+                // modelId and linkId are validated above.
                 break;
 
             case "save_params":
