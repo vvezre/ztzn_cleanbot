@@ -10,6 +10,7 @@ import org.springframework.messaging.MessageChannel;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
@@ -239,6 +240,69 @@ class RailcarMessageServiceTest {
         assertEquals("group-1", data.get("groupId"));
         assertEquals("p1", point.get("id"));
         assertEquals(1, point.get("sequence"));
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void shouldExposeAllModelingPointsInCommandStatusResult() {
+        ObjectMapper objectMapper = new ObjectMapper();
+        RailcarMessageService service = new RailcarMessageService(objectMapper);
+
+        VehicleService vehicleService = mock(VehicleService.class);
+        RedisUtil redisUtil = mock(RedisUtil.class);
+        DeviceStatusPublisher deviceStatusPublisher = mock(DeviceStatusPublisher.class);
+        CommandStatusService commandStatusService = mock(CommandStatusService.class);
+
+        Vehicle vehicle = new Vehicle();
+        vehicle.setSerialNumber("-T01250002");
+        when(vehicleService.getBySerialNumber("-T01250002")).thenReturn(vehicle);
+        when(redisUtil.getVehicle("-T01250002")).thenReturn(new HashMap<String, Object>());
+        when(redisUtil.setVehicle(eq("-T01250002"), any(), anyLong(), eq(TimeUnit.SECONDS))).thenReturn(true);
+
+        ReflectionTestUtils.setField(service, "vehicleService", vehicleService);
+        ReflectionTestUtils.setField(service, "redisUtil", redisUtil);
+        ReflectionTestUtils.setField(service, "deviceStatusPublisher", deviceStatusPublisher);
+        ReflectionTestUtils.setField(service, "commandStatusService", commandStatusService);
+
+        service.handleTRailcarStatus("-T01250002", "{"
+                + "\"timestamp\":1718600011,"
+                + "\"data\":{"
+                + "\"type\":\"command_result\","
+                + "\"command_id\":\"cmd-points-1\","
+                + "\"trace_id\":\"trace-points-1\","
+                + "\"command\":\"get_modeling_points\","
+                + "\"result\":{"
+                + "\"success\":true,"
+                + "\"message\":\"modeling points fetched\","
+                + "\"data\":{"
+                + "\"modelId\":\"model-1\","
+                + "\"areaPointCount\":1,"
+                + "\"linkPointCount\":1,"
+                + "\"groups\":[{\"groupId\":\"group-1\",\"points\":[{\"id\":\"p1\"}]}],"
+                + "\"groupLinks\":[{\"linkId\":\"link-1\",\"points\":[{\"id\":\"lp1\"}]}]"
+                + "}"
+                + "}"
+                + "}"
+                + "}");
+
+        ArgumentCaptor<Map> detailCaptor = ArgumentCaptor.forClass(Map.class);
+        verify(commandStatusService).markSucceeded(
+                eq("cmd-points-1"),
+                eq("modeling points fetched"),
+                detailCaptor.capture());
+
+        Map<String, Object> detail = (Map<String, Object>) detailCaptor.getValue();
+        Map<String, Object> result = (Map<String, Object>) detail.get("result");
+        Map<String, Object> data = (Map<String, Object>) result.get("data");
+        List<Map<String, Object>> groups = (List<Map<String, Object>>) data.get("groups");
+        List<Map<String, Object>> links = (List<Map<String, Object>>) data.get("groupLinks");
+        List<Map<String, Object>> areaPoints = (List<Map<String, Object>>) groups.get(0).get("points");
+        List<Map<String, Object>> linkPoints = (List<Map<String, Object>>) links.get(0).get("points");
+        assertEquals("model-1", data.get("modelId"));
+        assertEquals(1, data.get("areaPointCount"));
+        assertEquals(1, data.get("linkPointCount"));
+        assertEquals("p1", areaPoints.get(0).get("id"));
+        assertEquals("lp1", linkPoints.get(0).get("id"));
     }
 
     @Test
