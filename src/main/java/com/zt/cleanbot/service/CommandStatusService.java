@@ -114,6 +114,24 @@ public class CommandStatusService {
         return getCommandStatus(String.valueOf(latestCommandId));
     }
 
+    public CommandStatusSnapshot waitForTerminal(String commandId, long timeoutMs) {
+        long deadline = System.currentTimeMillis() + Math.max(0L, timeoutMs);
+        CommandStatusSnapshot snapshot;
+        do {
+            snapshot = getCommandStatus(commandId);
+            if (Boolean.TRUE.equals(snapshot.getTerminal())) {
+                return snapshot;
+            }
+            try {
+                Thread.sleep(100L);
+            } catch (InterruptedException exception) {
+                Thread.currentThread().interrupt();
+                return snapshot;
+            }
+        } while (System.currentTimeMillis() < deadline);
+        return snapshot;
+    }
+
     private CommandStatusSnapshot updateStatus(
             String commandId,
             String status,
