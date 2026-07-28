@@ -43,6 +43,19 @@ class TRailcarControlServiceModelingPathTest {
     }
 
     @Test
+    void acceptsModelingLinkPointsCommandAndRejectsInvalidProvidedId() {
+        TRailcarControlService service = new TRailcarControlService();
+        Map<String, Object> valid = new LinkedHashMap<>();
+        valid.put("modelId", "model-1");
+        Map<String, Object> invalid = new LinkedHashMap<>();
+        invalid.put("modelId", "../bad");
+
+        assertNull(service.validateCommand("get_modeling_link_points", valid));
+        assertNull(service.validateCommand("get_modeling_link_points", null));
+        assertNotNull(service.validateCommand("get_modeling_link_points", invalid));
+    }
+
+    @Test
     void acceptsModelingPointCommandWithValidIdentifiers() {
         TRailcarControlService service = new TRailcarControlService();
         Map<String, Object> params = new LinkedHashMap<>();
@@ -107,5 +120,18 @@ class TRailcarControlServiceModelingPathTest {
         Map<String, Object> invalid = new LinkedHashMap<>();
         invalid.put("pointType", "boundary");
         assertNotNull(service.validateCommand("clear_modeling_points", invalid));
+    }
+
+    @Test
+    void acceptsDeleteModelingPointWithValidIdAndRejectsMissingOrInvalidId() {
+        TRailcarControlService service = new TRailcarControlService();
+        Map<String, Object> valid = new LinkedHashMap<>();
+        valid.put("id", "p123_abc");
+        Map<String, Object> invalid = new LinkedHashMap<>();
+        invalid.put("id", "../bad");
+
+        assertNull(service.validateCommand("delete_modeling_point", valid));
+        assertNotNull(service.validateCommand("delete_modeling_point", null));
+        assertNotNull(service.validateCommand("delete_modeling_point", invalid));
     }
 }

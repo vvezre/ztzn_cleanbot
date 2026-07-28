@@ -211,6 +211,29 @@ public class TRailcarController {
     public ResponseEntity<Map<String, Object>> getModelingPoints(
             @PathVariable String productId,
             HttpServletRequest httpRequest) {
+        return getModelingPointList(
+                productId,
+                httpRequest,
+                "get_modeling_points",
+                "robot modeling points response is invalid");
+    }
+
+    @GetMapping("/modeling-link-points/{productId}")
+    public ResponseEntity<Map<String, Object>> getModelingLinkPoints(
+            @PathVariable String productId,
+            HttpServletRequest httpRequest) {
+        return getModelingPointList(
+                productId,
+                httpRequest,
+                "get_modeling_link_points",
+                "robot modeling link points response is invalid");
+    }
+
+    private ResponseEntity<Map<String, Object>> getModelingPointList(
+            String productId,
+            HttpServletRequest httpRequest,
+            String command,
+            String invalidResponseMessage) {
         Integer userId = (Integer) httpRequest.getAttribute("userId");
         Integer roleId = (Integer) httpRequest.getAttribute("roleId");
         String username = (String) httpRequest.getAttribute("username");
@@ -233,7 +256,7 @@ public class TRailcarController {
 
         TRailcarControlResponse commandResponse = sendTaskCommand(
                 productId,
-                "get_modeling_points",
+                command,
                 (Map<String, Object>) null,
                 userId,
                 username);
@@ -256,7 +279,7 @@ public class TRailcarController {
 
         List<?> points = extractModelingPoints(snapshot);
         if (points == null) {
-            response.put("message", "robot modeling points response is invalid");
+            response.put("message", invalidResponseMessage);
             return ResponseEntity.status(502).body(response);
         }
         response.put("points", points);

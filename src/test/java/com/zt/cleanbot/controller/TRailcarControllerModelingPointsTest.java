@@ -101,6 +101,56 @@ class TRailcarControllerModelingPointsTest {
     }
 
     @Test
+    void returnsOnlyTheFrontendLinkPointList() {
+        when(vehicleService.hasDeviceAccess(13, 3, "-T01250001")).thenReturn(true);
+        when(controlService.sendCommand(any(TRailcarCommandRequest.class))).thenReturn(
+                TRailcarControlResponse.success(
+                        "-T01250001",
+                        "get_modeling_link_points",
+                        "RAILCAR/S/-T01250001",
+                        null,
+                        "cmd-link-1",
+                        "trace-link-1"));
+
+        Map<String, Object> point = new LinkedHashMap<>();
+        point.put("id", "lp001");
+        point.put("name", "连接点1");
+        point.put("sequence", 1);
+        point.put("x", 0);
+        point.put("y", 470);
+        point.put("lat", 32.0365);
+        point.put("lon", 118.1235);
+
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("points", Arrays.asList(point));
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("success", true);
+        result.put("data", data);
+        Map<String, Object> detail = new LinkedHashMap<>();
+        detail.put("result", result);
+
+        CommandStatusSnapshot snapshot = new CommandStatusSnapshot();
+        snapshot.setStatus("SUCCEEDED");
+        snapshot.setTerminal(true);
+        snapshot.setDetail(detail);
+        when(commandStatusService.waitForTerminal(eq("cmd-link-1"), eq(10_000L))).thenReturn(snapshot);
+
+        ResponseEntity<Map<String, Object>> response = controller.getModelingLinkPoints("250001", request);
+
+        assertEquals(200, response.getStatusCodeValue());
+        assertNotNull(response.getBody());
+        assertEquals(1, response.getBody().size());
+        List<?> points = (List<?>) response.getBody().get("points");
+        assertEquals(1, points.size());
+        assertEquals("lp001", ((Map<?, ?>) points.get(0)).get("id"));
+
+        ArgumentCaptor<TRailcarCommandRequest> captor = ArgumentCaptor.forClass(TRailcarCommandRequest.class);
+        verify(controlService).sendCommand(captor.capture());
+        assertEquals("250001", captor.getValue().getProductId());
+        assertEquals("get_modeling_link_points", captor.getValue().getCommand());
+    }
+
+    @Test
     void returnsGatewayTimeoutWhenRobotDoesNotReply() {
         when(vehicleService.hasDeviceAccess(13, 3, "-T01250001")).thenReturn(true);
         when(controlService.sendCommand(any(TRailcarCommandRequest.class))).thenReturn(

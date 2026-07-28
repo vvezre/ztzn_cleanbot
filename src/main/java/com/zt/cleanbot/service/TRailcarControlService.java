@@ -246,10 +246,11 @@ public class TRailcarControlService {
             }
         }
 
-        if ("get_modeling_points".equals(command)) {
+        if ("get_modeling_points".equals(command)
+                || "get_modeling_link_points".equals(command)) {
             Object modelId = params == null ? null : params.get("modelId");
             if (modelId != null && !String.valueOf(modelId).matches("[A-Za-z0-9_-]+")) {
-                return "get_modeling_points command requires valid modelId when provided";
+                return command + " command requires valid modelId when provided";
             }
         }
 
@@ -283,6 +284,14 @@ public class TRailcarControlService {
                     && !"area".equals(String.valueOf(pointType))
                     && !"link".equals(String.valueOf(pointType))) {
                 return command + " command pointType must be area or link";
+            }
+        }
+
+        if ("delete_modeling_point".equals(command)) {
+            Object pointId = params == null ? null : params.get("id");
+            if (pointId == null
+                    || !String.valueOf(pointId).matches("[A-Za-z0-9_-]+")) {
+                return "delete_modeling_point command requires valid id";
             }
         }
 
@@ -363,6 +372,7 @@ public class TRailcarControlService {
             case "finish_modeling":
             case "get_modeling_state":
             case "undo_modeling_point":
+            case "delete_modeling_point":
             case "clear_modeling_points":
                 break;
 
@@ -412,6 +422,7 @@ public class TRailcarControlService {
             case "get_task_path":
             case "get_modeling_path":
             case "get_modeling_points":
+            case "get_modeling_link_points":
                 // 这些命令不需要参数
                 break;
 
