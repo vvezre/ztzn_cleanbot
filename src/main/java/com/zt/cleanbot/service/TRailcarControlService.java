@@ -376,6 +376,8 @@ public class TRailcarControlService {
             case "delete_modeling_point":
             case "delete_modeling_link_point":
             case "clear_modeling_points":
+            case "clear_modeling_area_points":
+            case "clear_modeling_link_points":
                 break;
 
             case "save_params":

@@ -112,6 +112,8 @@ class TRailcarControlServiceModelingPathTest {
         assertNull(service.validateCommand("get_modeling_state", null));
         assertNull(service.validateCommand("undo_modeling_point", null));
         assertNull(service.validateCommand("clear_modeling_points", null));
+        assertNull(service.validateCommand("clear_modeling_area_points", null));
+        assertNull(service.validateCommand("clear_modeling_link_points", null));
 
         Map<String, Object> area = new LinkedHashMap<>();
         area.put("pointType", "area");
