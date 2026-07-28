@@ -207,6 +207,79 @@ public class TRailcarController {
         return ResponseEntity.ok(response);
     }
 
+    @GetMapping("/modeling-result/{productId}")
+    public ResponseEntity<Map<String, Object>> getModelingResult(
+            @PathVariable String productId,
+            HttpServletRequest httpRequest) {
+        Integer userId = (Integer) httpRequest.getAttribute("userId");
+        Integer roleId = (Integer) httpRequest.getAttribute("roleId");
+        String username = (String) httpRequest.getAttribute("username");
+        Map<String, Object> response = new LinkedHashMap<>();
+
+        if (userId == null) {
+            response.put("success", false);
+            response.put("message", "not logged in");
+            response.put("data", null);
+            return ResponseEntity.status(401).body(response);
+        }
+        if (productId == null || !productId.matches("\\d{6}")) {
+            response.put("success", false);
+            response.put("message", "invalid productId");
+            response.put("data", null);
+            return ResponseEntity.badRequest().body(response);
+        }
+
+        String deviceId = "-T01" + productId;
+        if (!vehicleService.hasDeviceAccess(userId, roleId, deviceId)) {
+            response.put("success", false);
+            response.put("message", "permission denied");
+            response.put("data", null);
+            return ResponseEntity.status(403).body(response);
+        }
+
+        TRailcarControlResponse commandResponse = sendTaskCommand(
+                productId,
+                "get_modeling_result",
+                (Map<String, Object>) null,
+                userId,
+                username);
+        if (!Boolean.TRUE.equals(commandResponse.getSuccess())) {
+            response.put("success", false);
+            response.put("message", commandResponse.getMessage());
+            response.put("data", null);
+            return ResponseEntity.status(502).body(response);
+        }
+
+        CommandStatusSnapshot snapshot = commandStatusService.waitForTerminal(
+                commandResponse.getCommandId(),
+                MODELING_POINTS_QUERY_TIMEOUT_MS);
+        if (snapshot == null || !Boolean.TRUE.equals(snapshot.getTerminal())) {
+            response.put("success", false);
+            response.put("message", "robot response timeout");
+            response.put("data", null);
+            return ResponseEntity.status(504).body(response);
+        }
+        if (!"SUCCEEDED".equals(snapshot.getStatus())) {
+            response.put("success", false);
+            response.put("message", snapshot.getMessage());
+            response.put("data", null);
+            return ResponseEntity.status(502).body(response);
+        }
+
+        Map<String, Object> data = extractModelingResult(snapshot);
+        if (data == null) {
+            response.put("success", false);
+            response.put("message", "robot modeling result response is invalid");
+            response.put("data", null);
+            return ResponseEntity.status(502).body(response);
+        }
+
+        response.put("success", true);
+        response.put("message", "\u89c4\u5212\u6210\u529f");
+        response.put("data", data);
+        return ResponseEntity.ok(response);
+    }
+
     @GetMapping("/modeling-points/{productId}")
     public ResponseEntity<Map<String, Object>> getModelingPoints(
             @PathVariable String productId,
@@ -305,6 +378,36 @@ public class TRailcarController {
             return Collections.emptyList();
         }
         return pointsValue instanceof List ? (List<?>) pointsValue : null;
+    }
+
+    @SuppressWarnings("unchecked")
+    static Map<String, Object> extractModelingResult(CommandStatusSnapshot snapshot) {
+        if (snapshot == null || snapshot.getDetail() == null) {
+            return null;
+        }
+        Object resultValue = snapshot.getDetail().get("result");
+        if (!(resultValue instanceof Map)) {
+            return null;
+        }
+        Object dataValue = ((Map<String, Object>) resultValue).get("data");
+        if (!(dataValue instanceof Map)) {
+            return null;
+        }
+        Map<String, Object> resultData = (Map<String, Object>) dataValue;
+        Object areaPoints = resultData.get("areaPoints");
+        Object linkPoints = resultData.get("linkPoints");
+        Object pathPoints = resultData.get("pathPoints");
+        if (!(areaPoints instanceof List)
+                || !(linkPoints instanceof List)
+                || !(pathPoints instanceof List)) {
+            return null;
+        }
+
+        Map<String, Object> responseData = new LinkedHashMap<>();
+        responseData.put("areaPoints", areaPoints);
+        responseData.put("linkPoints", linkPoints);
+        responseData.put("pathPoints", pathPoints);
+        return responseData;
     }
 
     @GetMapping("/tasks/{productId}")

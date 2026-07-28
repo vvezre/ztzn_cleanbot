@@ -247,7 +247,8 @@ public class TRailcarControlService {
         }
 
         if ("get_modeling_points".equals(command)
-                || "get_modeling_link_points".equals(command)) {
+                || "get_modeling_link_points".equals(command)
+                || "get_modeling_result".equals(command)) {
             Object modelId = params == null ? null : params.get("modelId");
             if (modelId != null && !String.valueOf(modelId).matches("[A-Za-z0-9_-]+")) {
                 return command + " command requires valid modelId when provided";
@@ -427,6 +428,7 @@ public class TRailcarControlService {
             case "get_modeling_path":
             case "get_modeling_points":
             case "get_modeling_link_points":
+            case "get_modeling_result":
                 // 这些命令不需要参数
                 break;
 

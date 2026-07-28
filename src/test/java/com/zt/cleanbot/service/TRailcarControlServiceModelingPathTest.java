@@ -56,6 +56,19 @@ class TRailcarControlServiceModelingPathTest {
     }
 
     @Test
+    void acceptsCombinedModelingResultCommandAndRejectsInvalidProvidedId() {
+        TRailcarControlService service = new TRailcarControlService();
+        Map<String, Object> valid = new LinkedHashMap<>();
+        valid.put("modelId", "model-1");
+        Map<String, Object> invalid = new LinkedHashMap<>();
+        invalid.put("modelId", "../bad");
+
+        assertNull(service.validateCommand("get_modeling_result", valid));
+        assertNull(service.validateCommand("get_modeling_result", null));
+        assertNotNull(service.validateCommand("get_modeling_result", invalid));
+    }
+
+    @Test
     void acceptsModelingPointCommandWithValidIdentifiers() {
         TRailcarControlService service = new TRailcarControlService();
         Map<String, Object> params = new LinkedHashMap<>();
