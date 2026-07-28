@@ -287,11 +287,12 @@ public class TRailcarControlService {
             }
         }
 
-        if ("delete_modeling_point".equals(command)) {
+        if ("delete_modeling_point".equals(command)
+                || "delete_modeling_link_point".equals(command)) {
             Object pointId = params == null ? null : params.get("id");
             if (pointId == null
                     || !String.valueOf(pointId).matches("[A-Za-z0-9_-]+")) {
-                return "delete_modeling_point command requires valid id";
+                return command + " command requires valid id";
             }
         }
 
@@ -373,6 +374,7 @@ public class TRailcarControlService {
             case "get_modeling_state":
             case "undo_modeling_point":
             case "delete_modeling_point":
+            case "delete_modeling_link_point":
             case "clear_modeling_points":
                 break;
 

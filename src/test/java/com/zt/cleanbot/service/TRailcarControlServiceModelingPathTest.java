@@ -134,4 +134,17 @@ class TRailcarControlServiceModelingPathTest {
         assertNotNull(service.validateCommand("delete_modeling_point", null));
         assertNotNull(service.validateCommand("delete_modeling_point", invalid));
     }
+
+    @Test
+    void acceptsDeleteModelingLinkPointWithValidIdAndRejectsMissingOrInvalidId() {
+        TRailcarControlService service = new TRailcarControlService();
+        Map<String, Object> valid = new LinkedHashMap<>();
+        valid.put("id", "lp123_abc");
+        Map<String, Object> invalid = new LinkedHashMap<>();
+        invalid.put("id", "../bad");
+
+        assertNull(service.validateCommand("delete_modeling_link_point", valid));
+        assertNotNull(service.validateCommand("delete_modeling_link_point", null));
+        assertNotNull(service.validateCommand("delete_modeling_link_point", invalid));
+    }
 }
