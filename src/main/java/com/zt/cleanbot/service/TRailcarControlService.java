@@ -232,7 +232,10 @@ public class TRailcarControlService {
             }
         }
 
-        if ("select_task".equals(command) || "save_task".equals(command) || "set_current_task".equals(command)) {
+        if ("select_task".equals(command)
+                || "save_task".equals(command)
+                || "set_current_task".equals(command)
+                || "save_modeling_task".equals(command)) {
             Object taskName = params == null ? null : params.get("taskName");
             if (taskName == null || String.valueOf(taskName).trim().isEmpty()) {
                 return command + " command requires non-empty taskName";
@@ -357,6 +360,7 @@ public class TRailcarControlService {
             case "select_task":
             case "save_task":
             case "set_current_task":
+            case "save_modeling_task":
                 if (params == null || !params.containsKey("taskName")) {
                     return command + "命令需要参数：taskName";
                 }
@@ -429,6 +433,7 @@ public class TRailcarControlService {
             case "get_modeling_points":
             case "get_modeling_link_points":
             case "get_modeling_result":
+            case "get_task_names":
                 // 这些命令不需要参数
                 break;
 

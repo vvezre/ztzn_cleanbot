@@ -69,6 +69,17 @@ class TRailcarControlServiceModelingPathTest {
     }
 
     @Test
+    void acceptsNamedModelingTaskSaveAndTaskListCommands() {
+        TRailcarControlService service = new TRailcarControlService();
+        Map<String, Object> valid = new LinkedHashMap<>();
+        valid.put("taskName", "\u5382\u533a\u8def\u7ebf\u4e00");
+
+        assertNull(service.validateCommand("save_modeling_task", valid));
+        assertNotNull(service.validateCommand("save_modeling_task", null));
+        assertNull(service.validateCommand("get_task_names", null));
+    }
+
+    @Test
     void acceptsModelingPointCommandWithValidIdentifiers() {
         TRailcarControlService service = new TRailcarControlService();
         Map<String, Object> params = new LinkedHashMap<>();

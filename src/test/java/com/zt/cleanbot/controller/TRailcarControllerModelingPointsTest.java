@@ -6,6 +6,7 @@ import com.zt.cleanbot.dto.TRailcarControlResponse;
 import com.zt.cleanbot.service.CommandStatusService;
 import com.zt.cleanbot.service.TRailcarControlService;
 import com.zt.cleanbot.service.VehicleService;
+import com.zt.cleanbot.utils.RedisUtil;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -32,6 +33,7 @@ class TRailcarControllerModelingPointsTest {
     private TRailcarControlService controlService;
     private CommandStatusService commandStatusService;
     private VehicleService vehicleService;
+    private RedisUtil redisUtil;
     private MockHttpServletRequest request;
 
     @BeforeEach
@@ -40,9 +42,11 @@ class TRailcarControllerModelingPointsTest {
         controlService = mock(TRailcarControlService.class);
         commandStatusService = mock(CommandStatusService.class);
         vehicleService = mock(VehicleService.class);
+        redisUtil = mock(RedisUtil.class);
         ReflectionTestUtils.setField(controller, "tRailcarControlService", controlService);
         ReflectionTestUtils.setField(controller, "commandStatusService", commandStatusService);
         ReflectionTestUtils.setField(controller, "vehicleService", vehicleService);
+        ReflectionTestUtils.setField(controller, "redisUtil", redisUtil);
 
         request = new MockHttpServletRequest();
         request.setAttribute("userId", 13);
@@ -237,5 +241,117 @@ class TRailcarControllerModelingPointsTest {
 
         assertEquals(504, response.getStatusCodeValue());
         assertEquals("robot response timeout", response.getBody().get("message"));
+    }
+
+    @Test
+    void savesReadyModelingPlanUnderFrontendTaskName() {
+        when(vehicleService.hasDeviceAccess(13, 3, "-T01250001")).thenReturn(true);
+        when(controlService.sendCommand(any(TRailcarCommandRequest.class))).thenReturn(
+                TRailcarControlResponse.success(
+                        "-T01250001",
+                        "save_modeling_task",
+                        "RAILCAR/S/-T01250001",
+                        null,
+                        "cmd-save-1",
+                        "trace-save-1"));
+        Map<String, Object> resultData = new LinkedHashMap<>();
+        resultData.put("taskName", "\u5382\u533a\u8def\u7ebf\u4e00");
+        resultData.put("taskCount", 30);
+        resultData.put("modelId", "model-1");
+        when(commandStatusService.waitForTerminal(eq("cmd-save-1"), eq(10_000L)))
+                .thenReturn(succeededSnapshot(resultData));
+
+        Map<String, String> payload = new LinkedHashMap<>();
+        payload.put("productId", "250001");
+        payload.put("taskName", "\u5382\u533a\u8def\u7ebf\u4e00");
+        ResponseEntity<Map<String, Object>> response =
+                controller.saveModelingTask(payload, request);
+
+        assertEquals(200, response.getStatusCodeValue());
+        assertEquals(true, response.getBody().get("success"));
+        assertEquals("\u8def\u7ebf\u4fdd\u5b58\u6210\u529f", response.getBody().get("message"));
+        Map<?, ?> data = (Map<?, ?>) response.getBody().get("data");
+        assertEquals("\u5382\u533a\u8def\u7ebf\u4e00", data.get("taskName"));
+        assertEquals(30, data.get("taskCount"));
+
+        ArgumentCaptor<TRailcarCommandRequest> captor =
+                ArgumentCaptor.forClass(TRailcarCommandRequest.class);
+        verify(controlService).sendCommand(captor.capture());
+        assertEquals("save_modeling_task", captor.getValue().getCommand());
+        assertEquals("\u5382\u533a\u8def\u7ebf\u4e00", captor.getValue().getParams().get("taskName"));
+    }
+
+    @Test
+    void listsRoutesFromTheRequestedRobot() {
+        when(vehicleService.hasDeviceAccess(13, 3, "-T01250001")).thenReturn(true);
+        when(controlService.sendCommand(any(TRailcarCommandRequest.class))).thenReturn(
+                TRailcarControlResponse.success(
+                        "-T01250001",
+                        "get_task_names",
+                        "RAILCAR/S/-T01250001",
+                        null,
+                        "cmd-list-1",
+                        "trace-list-1"));
+        Map<String, Object> resultData = new LinkedHashMap<>();
+        resultData.put("taskNames", Arrays.asList("route-a", "route-b"));
+        resultData.put("currentTaskName", "route-a");
+        when(commandStatusService.waitForTerminal(eq("cmd-list-1"), eq(10_000L)))
+                .thenReturn(succeededSnapshot(resultData));
+
+        ResponseEntity<Map<String, Object>> response =
+                controller.getRobotTaskOptions("250001", request);
+
+        assertEquals(200, response.getStatusCodeValue());
+        Map<?, ?> data = (Map<?, ?>) response.getBody().get("data");
+        assertEquals(Arrays.asList("route-a", "route-b"), data.get("taskNames"));
+        assertEquals("route-a", data.get("currentTaskName"));
+
+        ArgumentCaptor<TRailcarCommandRequest> captor =
+                ArgumentCaptor.forClass(TRailcarCommandRequest.class);
+        verify(controlService).sendCommand(captor.capture());
+        assertEquals("get_task_names", captor.getValue().getCommand());
+        assertEquals("250001", captor.getValue().getProductId());
+    }
+
+    @Test
+    void selectsRouteOnlyAfterRobotConfirmsTheSwitch() {
+        when(vehicleService.hasDeviceAccess(13, 3, "-T01250001")).thenReturn(true);
+        when(controlService.sendCommand(any(TRailcarCommandRequest.class))).thenReturn(
+                TRailcarControlResponse.success(
+                        "-T01250001",
+                        "set_current_task",
+                        "RAILCAR/S/-T01250001",
+                        null,
+                        "cmd-select-1",
+                        "trace-select-1"));
+        Map<String, Object> resultData = new LinkedHashMap<>();
+        resultData.put("taskName", "route-b");
+        when(commandStatusService.waitForTerminal(eq("cmd-select-1"), eq(10_000L)))
+                .thenReturn(succeededSnapshot(resultData));
+
+        Map<String, String> payload = new LinkedHashMap<>();
+        payload.put("productId", "250001");
+        payload.put("taskName", "route-b");
+        ResponseEntity<Map<String, Object>> response =
+                controller.selectRobotTask(payload, request);
+
+        assertEquals(200, response.getStatusCodeValue());
+        assertEquals("\u8def\u7ebf\u9009\u62e9\u6210\u529f", response.getBody().get("message"));
+        assertEquals(
+                "route-b",
+                ((Map<?, ?>) response.getBody().get("data")).get("taskName"));
+    }
+
+    private CommandStatusSnapshot succeededSnapshot(Map<String, Object> resultData) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("success", true);
+        result.put("data", resultData);
+        Map<String, Object> detail = new LinkedHashMap<>();
+        detail.put("result", result);
+        CommandStatusSnapshot snapshot = new CommandStatusSnapshot();
+        snapshot.setStatus("SUCCEEDED");
+        snapshot.setTerminal(true);
+        snapshot.setDetail(detail);
+        return snapshot;
     }
 }

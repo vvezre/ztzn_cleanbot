@@ -410,7 +410,248 @@ public class TRailcarController {
         return responseData;
     }
 
+    @SuppressWarnings("unchecked")
+    static Map<String, Object> extractCommandData(CommandStatusSnapshot snapshot) {
+        if (snapshot == null || snapshot.getDetail() == null) {
+            return null;
+        }
+        Object resultValue = snapshot.getDetail().get("result");
+        if (!(resultValue instanceof Map)) {
+            return null;
+        }
+        Object dataValue = ((Map<String, Object>) resultValue).get("data");
+        return dataValue instanceof Map ? (Map<String, Object>) dataValue : null;
+    }
+
+    @PostMapping("/modeling-task/save")
+    public ResponseEntity<Map<String, Object>> saveModelingTask(
+            @RequestBody Map<String, String> payload,
+            HttpServletRequest httpRequest) {
+        Integer userId = (Integer) httpRequest.getAttribute("userId");
+        Integer roleId = (Integer) httpRequest.getAttribute("roleId");
+        String username = (String) httpRequest.getAttribute("username");
+        String productId = payload.get("productId");
+        String taskName = payload.get("taskName");
+        Map<String, Object> response = new LinkedHashMap<>();
+
+        if (userId == null) {
+            response.put("success", false);
+            response.put("message", "not logged in");
+            response.put("data", null);
+            return ResponseEntity.status(401).body(response);
+        }
+        if (productId == null || !productId.matches("\\d{6}")
+                || taskName == null || taskName.trim().isEmpty()) {
+            response.put("success", false);
+            response.put("message", "productId and taskName are required");
+            response.put("data", null);
+            return ResponseEntity.badRequest().body(response);
+        }
+
+        String deviceId = "-T01" + productId;
+        if (!vehicleService.hasDeviceAccess(userId, roleId, deviceId)) {
+            response.put("success", false);
+            response.put("message", "permission denied");
+            response.put("data", null);
+            return ResponseEntity.status(403).body(response);
+        }
+
+        TRailcarControlResponse commandResponse = sendTaskCommand(
+                productId,
+                "save_modeling_task",
+                taskName.trim(),
+                userId,
+                username);
+        if (!Boolean.TRUE.equals(commandResponse.getSuccess())) {
+            response.put("success", false);
+            response.put("message", commandResponse.getMessage());
+            response.put("data", null);
+            return ResponseEntity.status(502).body(response);
+        }
+
+        CommandStatusSnapshot snapshot = commandStatusService.waitForTerminal(
+                commandResponse.getCommandId(),
+                MODELING_POINTS_QUERY_TIMEOUT_MS);
+        if (snapshot == null || !Boolean.TRUE.equals(snapshot.getTerminal())) {
+            response.put("success", false);
+            response.put("message", "robot response timeout");
+            response.put("data", null);
+            return ResponseEntity.status(504).body(response);
+        }
+        if (!"SUCCEEDED".equals(snapshot.getStatus())) {
+            response.put("success", false);
+            response.put("message", snapshot.getMessage());
+            response.put("data", null);
+            return ResponseEntity.status(409).body(response);
+        }
+
+        Map<String, Object> resultData = extractCommandData(snapshot);
+        if (resultData == null || resultData.get("taskName") == null) {
+            response.put("success", false);
+            response.put("message", "robot task save response is invalid");
+            response.put("data", null);
+            return ResponseEntity.status(502).body(response);
+        }
+
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("taskName", resultData.get("taskName"));
+        data.put("taskCount", resultData.get("taskCount"));
+        if (resultData.get("modelId") != null) {
+            data.put("modelId", resultData.get("modelId"));
+        }
+        response.put("success", true);
+        response.put("message", "\u8def\u7ebf\u4fdd\u5b58\u6210\u529f");
+        response.put("data", data);
+        return ResponseEntity.ok(response);
+    }
+
     @GetMapping("/tasks/{productId}")
+    public ResponseEntity<Map<String, Object>> getRobotTaskOptions(
+            @PathVariable String productId,
+            HttpServletRequest httpRequest) {
+        Integer userId = (Integer) httpRequest.getAttribute("userId");
+        Integer roleId = (Integer) httpRequest.getAttribute("roleId");
+        String username = (String) httpRequest.getAttribute("username");
+        Map<String, Object> response = new LinkedHashMap<>();
+
+        if (userId == null) {
+            response.put("success", false);
+            response.put("message", "not logged in");
+            response.put("data", null);
+            return ResponseEntity.status(401).body(response);
+        }
+        if (productId == null || !productId.matches("\\d{6}")) {
+            response.put("success", false);
+            response.put("message", "invalid productId");
+            response.put("data", null);
+            return ResponseEntity.badRequest().body(response);
+        }
+
+        String deviceId = "-T01" + productId;
+        if (!vehicleService.hasDeviceAccess(userId, roleId, deviceId)) {
+            response.put("success", false);
+            response.put("message", "permission denied");
+            response.put("data", null);
+            return ResponseEntity.status(403).body(response);
+        }
+
+        TRailcarControlResponse commandResponse = sendTaskCommand(
+                productId,
+                "get_task_names",
+                (Map<String, Object>) null,
+                userId,
+                username);
+        if (!Boolean.TRUE.equals(commandResponse.getSuccess())) {
+            response.put("success", false);
+            response.put("message", commandResponse.getMessage());
+            response.put("data", null);
+            return ResponseEntity.status(502).body(response);
+        }
+
+        CommandStatusSnapshot snapshot = commandStatusService.waitForTerminal(
+                commandResponse.getCommandId(),
+                MODELING_POINTS_QUERY_TIMEOUT_MS);
+        if (snapshot == null || !Boolean.TRUE.equals(snapshot.getTerminal())) {
+            response.put("success", false);
+            response.put("message", "robot response timeout");
+            response.put("data", null);
+            return ResponseEntity.status(504).body(response);
+        }
+        if (!"SUCCEEDED".equals(snapshot.getStatus())) {
+            response.put("success", false);
+            response.put("message", snapshot.getMessage());
+            response.put("data", null);
+            return ResponseEntity.status(502).body(response);
+        }
+
+        Map<String, Object> resultData = extractCommandData(snapshot);
+        if (resultData == null || !(resultData.get("taskNames") instanceof List)) {
+            response.put("success", false);
+            response.put("message", "robot task list response is invalid");
+            response.put("data", null);
+            return ResponseEntity.status(502).body(response);
+        }
+
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("taskNames", resultData.get("taskNames"));
+        data.put("currentTaskName", resultData.get("currentTaskName"));
+        response.put("success", true);
+        response.put("message", "\u83b7\u53d6\u8def\u7ebf\u5217\u8868\u6210\u529f");
+        response.put("data", data);
+        return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/tasks/current")
+    public ResponseEntity<Map<String, Object>> selectRobotTask(
+            @RequestBody Map<String, String> payload,
+            HttpServletRequest httpRequest) {
+        Integer userId = (Integer) httpRequest.getAttribute("userId");
+        Integer roleId = (Integer) httpRequest.getAttribute("roleId");
+        String username = (String) httpRequest.getAttribute("username");
+        String productId = payload.get("productId");
+        String taskName = payload.get("taskName");
+        Map<String, Object> response = new LinkedHashMap<>();
+
+        if (userId == null) {
+            response.put("success", false);
+            response.put("message", "not logged in");
+            response.put("data", null);
+            return ResponseEntity.status(401).body(response);
+        }
+        if (productId == null || !productId.matches("\\d{6}")
+                || taskName == null || taskName.trim().isEmpty()) {
+            response.put("success", false);
+            response.put("message", "productId and taskName are required");
+            response.put("data", null);
+            return ResponseEntity.badRequest().body(response);
+        }
+
+        String deviceId = "-T01" + productId;
+        if (!vehicleService.hasDeviceAccess(userId, roleId, deviceId)) {
+            response.put("success", false);
+            response.put("message", "permission denied");
+            response.put("data", null);
+            return ResponseEntity.status(403).body(response);
+        }
+
+        TRailcarControlResponse commandResponse = sendTaskCommand(
+                productId,
+                "set_current_task",
+                taskName.trim(),
+                userId,
+                username);
+        if (!Boolean.TRUE.equals(commandResponse.getSuccess())) {
+            response.put("success", false);
+            response.put("message", commandResponse.getMessage());
+            response.put("data", null);
+            return ResponseEntity.status(502).body(response);
+        }
+
+        CommandStatusSnapshot snapshot = commandStatusService.waitForTerminal(
+                commandResponse.getCommandId(),
+                MODELING_POINTS_QUERY_TIMEOUT_MS);
+        if (snapshot == null || !Boolean.TRUE.equals(snapshot.getTerminal())) {
+            response.put("success", false);
+            response.put("message", "robot response timeout");
+            response.put("data", null);
+            return ResponseEntity.status(504).body(response);
+        }
+        if (!"SUCCEEDED".equals(snapshot.getStatus())) {
+            response.put("success", false);
+            response.put("message", snapshot.getMessage());
+            response.put("data", null);
+            return ResponseEntity.status(409).body(response);
+        }
+
+        redisUtil.delete("task_path:" + deviceId);
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("taskName", taskName.trim());
+        response.put("success", true);
+        response.put("message", "\u8def\u7ebf\u9009\u62e9\u6210\u529f");
+        response.put("data", data);
+        return ResponseEntity.ok(response);
+    }
+
     public ResponseEntity<Map<String, Object>> getTaskOptions(
             @PathVariable String productId,
             HttpServletRequest httpRequest) {
@@ -444,7 +685,6 @@ public class TRailcarController {
         return ResponseEntity.ok(response);
     }
 
-    @PostMapping("/tasks/current")
     public ResponseEntity<Map<String, Object>> setCurrentTask(
             @RequestBody Map<String, String> payload,
             HttpServletRequest httpRequest) {
