@@ -77,6 +77,7 @@ class TRailcarControlServiceModelingPathTest {
         assertNull(service.validateCommand("save_modeling_task", valid));
         assertNotNull(service.validateCommand("save_modeling_task", null));
         assertNull(service.validateCommand("get_task_names", null));
+        assertNull(service.validateCommand("get_saved_routes", null));
     }
 
     @Test

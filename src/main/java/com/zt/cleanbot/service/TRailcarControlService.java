@@ -434,6 +434,7 @@ public class TRailcarControlService {
             case "get_modeling_link_points":
             case "get_modeling_result":
             case "get_task_names":
+            case "get_saved_routes":
                 // 这些命令不需要参数
                 break;
 

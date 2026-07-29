@@ -314,6 +314,82 @@ class TRailcarControllerModelingPointsTest {
     }
 
     @Test
+    void returnsAllSavedRoutePointDataFromTheRequestedRobot() {
+        when(vehicleService.hasDeviceAccess(13, 3, "-T01250001")).thenReturn(true);
+        when(controlService.sendCommand(any(TRailcarCommandRequest.class))).thenReturn(
+                TRailcarControlResponse.success(
+                        "-T01250001",
+                        "get_saved_routes",
+                        "RAILCAR/S/-T01250001",
+                        null,
+                        "cmd-routes-1",
+                        "trace-routes-1"));
+
+        Map<String, Object> route = new LinkedHashMap<>();
+        route.put("taskName", "route-a");
+        route.put("modelId", "model-a");
+        route.put("current", true);
+        route.put("areaPoints", Arrays.asList(new LinkedHashMap<String, Object>()));
+        route.put("linkPoints", Arrays.asList(new LinkedHashMap<String, Object>()));
+        route.put("pathPoints", Arrays.asList(
+                new LinkedHashMap<String, Object>(),
+                new LinkedHashMap<String, Object>()));
+
+        Map<String, Object> resultData = new LinkedHashMap<>();
+        resultData.put("routes", Arrays.asList(route));
+        resultData.put("currentTaskName", "route-a");
+        when(commandStatusService.waitForTerminal(eq("cmd-routes-1"), eq(10_000L)))
+                .thenReturn(succeededSnapshot(resultData));
+
+        ResponseEntity<Map<String, Object>> response =
+                controller.getSavedRoutes("250001", request);
+
+        assertEquals(200, response.getStatusCodeValue());
+        assertEquals(true, response.getBody().get("success"));
+        assertEquals("\u83b7\u53d6\u5df2\u4fdd\u5b58\u8def\u7ebf\u6210\u529f", response.getBody().get("message"));
+        Map<?, ?> data = (Map<?, ?>) response.getBody().get("data");
+        assertEquals("250001", data.get("productId"));
+        assertEquals("-T01250001", data.get("serialNumber"));
+        assertEquals("route-a", data.get("currentTaskName"));
+        List<?> routes = (List<?>) data.get("routes");
+        assertEquals(1, routes.size());
+        assertEquals("route-a", ((Map<?, ?>) routes.get(0)).get("taskName"));
+        assertEquals(
+                2,
+                ((List<?>) ((Map<?, ?>) routes.get(0)).get("pathPoints")).size());
+
+        ArgumentCaptor<TRailcarCommandRequest> captor =
+                ArgumentCaptor.forClass(TRailcarCommandRequest.class);
+        verify(controlService).sendCommand(captor.capture());
+        assertEquals("get_saved_routes", captor.getValue().getCommand());
+        assertEquals("250001", captor.getValue().getProductId());
+    }
+
+    @Test
+    void returnsGatewayTimeoutWhenSavedRoutesRobotIsOffline() {
+        when(vehicleService.hasDeviceAccess(13, 3, "-T01250001")).thenReturn(true);
+        when(controlService.sendCommand(any(TRailcarCommandRequest.class))).thenReturn(
+                TRailcarControlResponse.success(
+                        "-T01250001",
+                        "get_saved_routes",
+                        "RAILCAR/S/-T01250001",
+                        null,
+                        "cmd-routes-timeout",
+                        "trace-routes-timeout"));
+        CommandStatusSnapshot snapshot = new CommandStatusSnapshot();
+        snapshot.setStatus("DISPATCHED");
+        snapshot.setTerminal(false);
+        when(commandStatusService.waitForTerminal(eq("cmd-routes-timeout"), eq(10_000L)))
+                .thenReturn(snapshot);
+
+        ResponseEntity<Map<String, Object>> response =
+                controller.getSavedRoutes("250001", request);
+
+        assertEquals(504, response.getStatusCodeValue());
+        assertEquals("\u8bbe\u5907\u79bb\u7ebf\u6216\u54cd\u5e94\u8d85\u65f6", response.getBody().get("message"));
+    }
+
+    @Test
     void selectsRouteOnlyAfterRobotConfirmsTheSwitch() {
         when(vehicleService.hasDeviceAccess(13, 3, "-T01250001")).thenReturn(true);
         when(controlService.sendCommand(any(TRailcarCommandRequest.class))).thenReturn(
