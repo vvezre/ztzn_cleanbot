@@ -133,6 +133,7 @@ class TRailcarControlServiceModelingPathTest {
         TRailcarControlService service = new TRailcarControlService();
 
         assertNull(service.validateCommand("start_modeling", null));
+        assertNull(service.validateCommand("new_modeling_area", null));
         assertNull(service.validateCommand("finish_modeling", null));
         assertNull(service.validateCommand("get_modeling_state", null));
         assertNull(service.validateCommand("undo_modeling_point", null));

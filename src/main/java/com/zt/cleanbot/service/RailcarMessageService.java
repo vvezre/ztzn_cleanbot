@@ -501,6 +501,14 @@ public class RailcarMessageService {
         return "active";
     }
 
+    /**
+     * 把小车回传的命令进度写入“设备最近状态”。
+     *
+     * <p>{@code ack} 代表小车已经接收命令，对应 ACCEPTED；
+     * {@code command_result} 才代表命令已经结束，并依据 result.success 转成
+     * SUCCEEDED 或 FAILED。这里保存的是“该设备最近一次命令”的摘要，供设备列表、
+     * WebSocket 状态推送和现场排查使用。</p>
+     */
     private void applyCommandTracking(Map<String, Object> redisData, JsonNode dataNode, String messageType) {
         String commandId = readText(dataNode, "command_id");
         String traceId = readText(dataNode, "trace_id");
@@ -508,6 +516,8 @@ public class RailcarMessageService {
         String lastCommandStatus = "ack".equalsIgnoreCase(messageType) ? "ACCEPTED" : "UNKNOWN";
         String lastCommandMessage = readText(dataNode, "status");
 
+        // FSM 最终回包结构为 data.result = {success, message, data}。
+        // message 优先采用 FSM 给出的具体业务说明，例如“点位记录成功”。
         JsonNode resultNode = dataNode.path("result");
         if ("command_result".equals(messageType)) {
             boolean resultSuccess = resultNode.path("success").asBoolean(false);
@@ -533,6 +543,12 @@ public class RailcarMessageService {
         }
     }
 
+    /**
+     * 缓存已保存、已选择任务的执行路径。
+     *
+     * <p>只有 get_task_path 的成功最终回包才会进入缓存；ACK、失败结果及其他命令
+     * 都不会覆盖现有路径。缓存键为 {@code task_path:完整设备序列号}，有效期 24 小时。</p>
+     */
     private void cacheTaskPathIfPresent(String serialNumber, JsonNode dataNode, String messageType) {
         if (!"command_result".equals(messageType)) {
             return;
@@ -558,6 +574,13 @@ public class RailcarMessageService {
         redisUtil.set("task_path:" + serialNumber, cachedPath, 24, TimeUnit.HOURS);
     }
 
+    /**
+     * 缓存尚未命名保存的建模规划结果。
+     *
+     * <p>路径算法运行在小车 FSM 中。云平台不重新计算，只接收
+     * {@code get_modeling_path/finish_modeling} 的成功结果，并按“设备 + modelId”缓存。
+     * 这样同一台小车的不同建模会话、不同小车之间都不会互相覆盖。</p>
+     */
     private void cacheModelingPathIfPresent(String serialNumber, JsonNode dataNode, String messageType) {
         if (!"command_result".equals(messageType)) {
             return;
@@ -579,6 +602,7 @@ public class RailcarMessageService {
             return;
         }
 
+        // 保存 FSM 原始 data，Controller 读取后再整理为前端需要的响应结构。
         Map<String, Object> cachedPath = objectMapper.convertValue(pathDataNode, Map.class);
         cachedPath.put("deviceId", serialNumber);
         if (!cachedPath.containsKey("updatedAt")) {
@@ -587,11 +611,26 @@ public class RailcarMessageService {
         redisUtil.set("modeling_path:" + serialNumber + ":" + modelId, cachedPath, 24, TimeUnit.HOURS);
     }
 
+    /**
+     * 使用小车原样回传的 commandId 更新单条命令状态快照。
+     *
+     * <p>这是 {@code GET /api/command-status/{commandId}} 的数据来源：</p>
+     * <ul>
+     *   <li>ack + accepted：ACCEPTED；</li>
+     *   <li>ack + running：RUNNING；</li>
+     *   <li>command_result + success=true：SUCCEEDED；</li>
+     *   <li>command_result + success=false：FAILED。</li>
+     * </ul>
+     *
+     * <p>最终回包的完整 result 会放进 detail.result，点位、modelId、路线列表等业务数据
+     * 因此能够通过命令状态接口原样提供给前端。</p>
+     */
     private void updateCommandSnapshot(String serialNumber, JsonNode dataNode, String messageType) {
         String commandId = readText(dataNode, "command_id");
         if (commandId == null) {
             return;
         }
+        // 这些字段用于把结果与设备、命令和跨链路 trace 对应起来。
         Map<String, Object> detail = new LinkedHashMap<String, Object>();
         detail.put("deviceId", serialNumber);
         detail.put("deviceType", "T_PYTHON");
@@ -599,6 +638,7 @@ public class RailcarMessageService {
         putIfNotNull(detail, "action", readText(dataNode, "command"));
         putIfNotNull(detail, "messageType", messageType);
 
+        // ACK 只更新中间状态，不携带最终业务结果，也不能标记为成功完成。
         if ("ack".equals(messageType)) {
             String ackStatus = readText(dataNode, "status");
             String ackMessage = ackStatus != null ? ackStatus : "ACK_ACCEPTED";
@@ -610,6 +650,7 @@ public class RailcarMessageService {
             return;
         }
 
+        // 非 ACK 消息按最终 command_result 处理，并保留完整 result 给前端读取。
         JsonNode resultNode = dataNode.path("result");
         boolean resultSuccess = resultNode.path("success").asBoolean(false);
         String resultMessage = readText(resultNode, "message");

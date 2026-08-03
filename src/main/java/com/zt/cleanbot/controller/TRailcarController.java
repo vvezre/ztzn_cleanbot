@@ -21,7 +21,14 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * T型号小车控制API
+ * T 型清扫机器人的前端 HTTP 入口。
+ *
+ * 该控制器不执行机器人算法，主要负责：
+ * 1. 从登录 Token 中取得用户与角色。
+ * 2. 检查用户是否有权访问 productId 对应的小车。
+ * 3. 将 HTTP 请求转换为 MQTT 命令发给小车 FSM。
+ * 4. 根据 commandId 等待小车最终结果。
+ * 5. 将小车内部数据整理为前端约定的 success/message/data 结构。
  */
 @CrossOrigin(origins = { "*" }, maxAge = 3600L)
 @RestController
@@ -43,6 +50,21 @@ public class TRailcarController {
     @Autowired
     private RedisUtil redisUtil;
 
+    /**
+     * 前端控制命令的统一入口。
+     * 云平台只负责登录权限校验和 MQTT 转发，具体建模与运动由小车 FSM 执行。
+     *
+     * 请求示例：
+     * {"productId":"250001","command":"sample_modeling_point","params":{}}
+     *
+     * 该接口是异步命令入口。HTTP 200 只代表 MQTT 已发送，返回中的
+     * commandStatus=DISPATCHED 不代表小车已完成。前端需使用返回的 commandId
+     * 调用 GET /api/command-status/{commandId}，直到 SUCCEEDED 或 FAILED。
+     *
+     * @param request productId、command 和可选 params
+     * @param httpRequest 由登录拦截器写入 userId/roleId/username
+     * @return MQTT 发送状态、commandId、traceId 和设备主题
+     */
     @PostMapping("/command")
     public ResponseEntity<TRailcarControlResponse> sendCommand(
             @RequestBody TRailcarCommandRequest request,
@@ -78,6 +100,7 @@ public class TRailcarController {
         String clientIp = getClientIp(httpRequest);
         log.debug("客户端IP: {}", clientIp);
 
+        // 命令发送成功只代表已进入 MQTT；最终执行结果由 commandId 串联。
         TRailcarControlResponse response = tRailcarControlService.sendCommand(request);
 
         if (response.getSuccess()) {
@@ -207,6 +230,18 @@ public class TRailcarController {
         return ResponseEntity.ok(response);
     }
 
+    /**
+     * 获取当前建模的统一绘图数据：区域点、连接点和规划路径点。
+     *
+     * 此接口是“表面同步、内部 MQTT”的查询：
+     * 1. 云平台向小车发送 get_modeling_result。
+     * 2. 最多等待 10 秒钟。
+     * 3. 小车回复成功后，从 detail.result.data 提取数据。
+     * 4. 直接向前端返回 data.areaPoints/data.linkPoints/data.pathPoints。
+     *
+     * areaPoints 和 linkPoints 是用户记录的点；pathPoints 是 FSM 已生成的机器人执行路径点。
+     * 该接口不会在云平台重新计算路径。
+     */
     @GetMapping("/modeling-result/{productId}")
     public ResponseEntity<Map<String, Object>> getModelingResult(
             @PathVariable String productId,
@@ -280,6 +315,12 @@ public class TRailcarController {
         return ResponseEntity.ok(response);
     }
 
+    /**
+     * 查询当前建模会话中的全部区域边界点。
+     *
+     * 返回 data.points[]，每个点包含 id、name、sequence、x、y、lat、lon。
+     * id 是删除点时使用的唯一键，sequence 是用户的记录顺序，x/y 单位为厘米。
+     */
     @GetMapping("/modeling-points/{productId}")
     public ResponseEntity<Map<String, Object>> getModelingPoints(
             @PathVariable String productId,
@@ -291,6 +332,12 @@ public class TRailcarController {
                 "robot modeling points response is invalid");
     }
 
+    /**
+     * 查询当前建模会话中的全部跨区域连接点。
+     *
+     * 返回格式与区域点一致，但数据来自连接桥记录。
+     * 连接点会按 sequence 组成跨区域移动路线，不强制只有两个点。
+     */
     @GetMapping("/modeling-link-points/{productId}")
     public ResponseEntity<Map<String, Object>> getModelingLinkPoints(
             @PathVariable String productId,
@@ -302,6 +349,14 @@ public class TRailcarController {
                 "robot modeling link points response is invalid");
     }
 
+    /**
+     * 区域点和连接点的公共查询流程。
+     *
+     * 两个接口的差别只是发给小车的 command：
+     * get_modeling_points 或 get_modeling_link_points。
+     * 登录校验、设备权限校验、MQTT 等待和 points[] 提取都共用该方法，
+     * 避免两个接口出现不一致的超时或错误处理。
+     */
     private ResponseEntity<Map<String, Object>> getModelingPointList(
             String productId,
             HttpServletRequest httpRequest,
@@ -327,6 +382,7 @@ public class TRailcarController {
             return ResponseEntity.status(403).body(response);
         }
 
+        // 发送查询命令。此时 commandResponse 仅能确认 MQTT 是否成功发送。
         TRailcarControlResponse commandResponse = sendTaskCommand(
                 productId,
                 command,
@@ -338,6 +394,7 @@ public class TRailcarController {
             return ResponseEntity.status(502).body(response);
         }
 
+        // 使用 commandId 等待小车的 command_result，而不是把 DISPATCHED 当成最终成功。
         CommandStatusSnapshot snapshot = commandStatusService.waitForTerminal(
                 commandResponse.getCommandId(),
                 MODELING_POINTS_QUERY_TIMEOUT_MS);
@@ -350,6 +407,7 @@ public class TRailcarController {
             return ResponseEntity.status(502).body(response);
         }
 
+        // 小车结果位于 snapshot.detail.result.data.points，对前端则直接返回为 points。
         List<?> points = extractModelingPoints(snapshot);
         if (points == null) {
             response.put("message", invalidResponseMessage);
@@ -361,6 +419,7 @@ public class TRailcarController {
 
     @SuppressWarnings("unchecked")
     static List<?> extractModelingPoints(CommandStatusSnapshot snapshot) {
+        // 逐层校验 Map/List 类型，避免小车版本或数据异常导致 ClassCastException。
         if (snapshot == null || snapshot.getDetail() == null) {
             return null;
         }
@@ -382,6 +441,7 @@ public class TRailcarController {
 
     @SuppressWarnings("unchecked")
     static Map<String, Object> extractModelingResult(CommandStatusSnapshot snapshot) {
+        // 统一绘图接口要求三个列表必须同时存在，否则认为小车回复不完整。
         if (snapshot == null || snapshot.getDetail() == null) {
             return null;
         }
@@ -412,6 +472,7 @@ public class TRailcarController {
 
     @SuppressWarnings("unchecked")
     static Map<String, Object> extractCommandData(CommandStatusSnapshot snapshot) {
+        // 保存、查询和选择等同步接口共用的 detail.result.data 提取方法。
         if (snapshot == null || snapshot.getDetail() == null) {
             return null;
         }
@@ -423,6 +484,15 @@ public class TRailcarController {
         return dataValue instanceof Map ? (Map<String, Object>) dataValue : null;
     }
 
+    /**
+     * 将 finish_modeling 已生成的路径按用户输入的 taskName 保存在小车中。
+     *
+     * 请求：{"productId":"250001","taskName":"路线1"}
+     *
+     * 云平台发送 save_modeling_task，并等待小车真正写入任务文件后才返回成功。
+     * 成功返回 taskName、taskCount 和 modelId。如果路径尚未规划、名称非法或同名冲突，
+     * 小车会返回失败，云平台用 HTTP 409 转达业务冲突。
+     */
     @PostMapping("/modeling-task/save")
     public ResponseEntity<Map<String, Object>> saveModelingTask(
             @RequestBody Map<String, String> payload,
@@ -581,6 +651,14 @@ public class TRailcarController {
         return ResponseEntity.ok(response);
     }
 
+    /**
+     * 根据产品编号查询小车已命名保存的全部路线和点位数据。
+     *
+     * 返回 data.productId、data.serialNumber、data.currentTaskName 和 data.routes[]。
+     * routes[] 中每条路线包含名称以及 areaPoints/linkPoints/pathPoints，前端可直接用于路线列表和预览。
+     *
+     * 路线存储在小车端，所以该查询需要设备在线；10 秒内没有回复时返回 HTTP 504。
+     */
     @GetMapping("/saved-routes/{productId}")
     public ResponseEntity<Map<String, Object>> getSavedRoutes(
             @PathVariable String productId,
@@ -659,6 +737,15 @@ public class TRailcarController {
         return ResponseEntity.ok(response);
     }
 
+    /**
+     * 真正设置小车下一次 auto_drive 要执行的路线，不等同于前端页面高亮。
+     *
+     * 请求：{"productId":"250001","taskName":"路线1"}
+     *
+     * 小车端 set_current_task 成功后，会将路线配置同步为 config.json 和 Redis currentTaskName。
+     * 只有完成该步骤，后续 auto_drive 才会执行该路线。
+     * 云平台等待小车最终 SUCCEEDED 后才返回“路线选择成功”，并清理旧的路径缓存。
+     */
     @PostMapping("/tasks/current")
     public ResponseEntity<Map<String, Object>> selectRobotTask(
             @RequestBody Map<String, String> payload,

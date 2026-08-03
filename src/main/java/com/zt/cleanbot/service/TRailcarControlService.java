@@ -19,8 +19,21 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * T型号小车控制服务
- * 负责构建JSON格式的MQTT消息并发送
+ * T 型号小车的“HTTP 命令 -> MQTT 命令”转换服务。
+ *
+ * <p>完整调用链如下：</p>
+ * <ol>
+ *   <li>前端调用 {@code POST /api/t-railcar/command}，提交产品编号、命令名和参数；</li>
+ *   <li>Controller 完成登录用户及设备权限检查后，把请求交给本服务；</li>
+ *   <li>本服务生成 {@code commandId/traceId}，建立一条初始命令状态记录；</li>
+ *   <li>把 HTTP 字段转换成 FSM 能识别的 MQTT JSON，并发布到该小车的专属主题；</li>
+ *   <li>发布成功后只把状态标记为 {@code DISPATCHED}，等待小车异步返回 ACK 和执行结果；</li>
+ *   <li>小车回包由 {@link RailcarMessageService} 接收，并用同一个 {@code commandId}
+ *       更新成 {@code ACCEPTED/RUNNING/SUCCEEDED/FAILED}。</li>
+ * </ol>
+ *
+ * <p>因此，“HTTP 返回 success=true”只说明云平台已经把命令发出，不能等同于机器人已经执行成功。
+ * 前端如需最终点位、保存结果或启动结果，必须继续查询命令状态。</p>
  */
 @Slf4j
 @Service
@@ -41,17 +54,31 @@ public class TRailcarControlService {
     private RedisUtil redisUtil;
 
     /**
-     * 发送T型号小车控制命令
-     * @param request 命令请求
-     * @return 控制响应
+     * 校验、登记并发布一条 T 型号小车命令。
+     *
+     * <p>request 中最重要的业务字段：</p>
+     * <ul>
+     *   <li>{@code productId}：设备产品编号，例如 {@code 250001}；</li>
+     *   <li>{@code command}：FSM 命令，例如 {@code start_modeling}、
+     *       {@code sample_modeling_point}、{@code save_modeling_task}；</li>
+     *   <li>{@code params}：命令参数；没有参数时也会向小车发送空对象；</li>
+     *   <li>{@code commandId}：一次命令的唯一编号；未提供时由云平台生成；</li>
+     *   <li>{@code traceId}：跨 HTTP、MQTT、FSM 日志追踪同一次请求的编号。</li>
+     * </ul>
+     *
+     * @param request 已通过 Controller 基础校验的命令请求
+     * @return 发布受理结果；成功时包含 commandId，但此时小车可能尚未开始执行
      */
     public TRailcarControlResponse sendCommand(TRailcarCommandRequest request) {
+        // commandId 用于前端查询最终结果，traceId 用于跨 HTTP、MQTT 和小车日志排查同一次调用。
         String deviceId = request.getFullDeviceId();
         String command = request.getCommand();
         String traceId = normalizeId(request.getTraceId(), "trace");
         String commandId = normalizeId(request.getCommandId(), "cmd");
         request.setTraceId(traceId);
         request.setCommandId(commandId);
+        // 先创建 PENDING 状态快照。即使后续参数校验或 MQTT 发布失败，前端仍能用
+        // commandId 查到明确的失败原因，而不是只能看到一个没有上下文的 HTTP 错误。
         commandStatusService.initializeCommand(
                 commandId,
                 traceId,
@@ -62,6 +89,8 @@ public class TRailcarControlService {
                 DEFAULT_COMMAND_TIMEOUT_MS,
                 buildCommandDetail(request));
 
+        // 云平台只校验协议层必需字段，避免把明显不完整的命令发送给小车。
+        // 具体能否执行（是否正在建模、是否已有任务等）仍由 FSM 根据实时状态判断。
         String validationError = validateCommand(command, request.getParams());
         if (validationError != null) {
             commandStatusService.markFailed(commandId, validationError, buildStatusDetail(request, "FAILED"));
@@ -69,6 +98,8 @@ public class TRailcarControlService {
         }
 
         try {
+            // 主动查询建模路径前删除同 modelId 的旧缓存，避免本次小车未回包时
+            // Controller 错把上一轮的路径当成最新结果返回。
             if ("get_modeling_path".equals(command) && request.getParams() != null) {
                 Object modelId = request.getParams().get("modelId");
                 if (modelId != null && !String.valueOf(modelId).trim().isEmpty()) {
@@ -79,24 +110,28 @@ public class TRailcarControlService {
                     traceId, commandId, deviceId, command, request.getParams());
 
             // 1. 构建MQTT消息JSON
+            // 把 HTTP 请求转换为小车 MQTT 命令 JSON。
             Map<String, Object> mqttMessage = buildMqttMessage(request);
             String jsonPayload = objectMapper.writeValueAsString(mqttMessage);
 
             log.debug("MQTT消息JSON: {}", jsonPayload);
 
             // 2. 发送到MQTT Broker
+            // 每台设备都使用自己的 MQTT 命令主题，避免不同小车互相影响。
             String topic = request.getPublishTopic();
             byte[] payload = jsonPayload.getBytes(StandardCharsets.UTF_8);
 
             Message<byte[]> message = MessageBuilder
                     .withPayload(payload)
                     .setHeader(MqttHeaders.TOPIC, topic)
-                    .setHeader(MqttHeaders.QOS, 1) // QoS 1 确保到达
+                    // QoS 1 表示 Broker 至少投递一次；commandId 也可用于识别同一命令。
+                    .setHeader(MqttHeaders.QOS, 1)
                     .build();
 
             boolean sent = mqttOutboundChannel.send(message);
 
             if (sent) {
+                // DISPATCHED 表示云平台已成功发送，不代表小车已执行完成。
                 commandStatusService.markDispatched(commandId, "MQTT消息已发送", buildStatusDetail(request, "DISPATCHED"));
                 log.info("T型号小车控制命令发送成功 - 主题: {}, 命令: {}, 长度: {} 字节",
                         topic, command, payload.length);
@@ -118,6 +153,10 @@ public class TRailcarControlService {
         }
     }
 
+    /**
+     * 读取某台设备最近一次通过 {@code get_task_path} 回传的已选任务路径。
+     * 缓存键按完整设备序列号隔离，避免多台小车之间串数据。
+     */
     @SuppressWarnings("unchecked")
     public Map<String, Object> getCachedTaskPath(String productId) {
         String deviceId = "-T01" + productId;
@@ -131,6 +170,10 @@ public class TRailcarControlService {
         return objectMapper.convertValue(cached, Map.class);
     }
 
+    /**
+     * 读取指定设备、指定 modelId 的建模规划结果。
+     * modelId 是一次建模会话的编号，同一设备的多次建模不会共用一个缓存键。
+     */
     @SuppressWarnings("unchecked")
     public Map<String, Object> getCachedModelingPath(String productId, String modelId) {
         String deviceId = "-T01" + productId;
@@ -153,25 +196,29 @@ public class TRailcarControlService {
      *   "product_id": "250001",
      *   "timestamp": 1704067200,
      *   "data": {
+     *     "command_id": "cmd_xxx",
+     *     "trace_id": "trace_xxx",
      *     "command": "drive",
      *     "params": { ... }
      *   }
      * }
      */
     private Map<String, Object> buildMqttMessage(TRailcarCommandRequest request) {
+        // 外层字段用于确认消息属于哪家公司的哪一类、哪一台设备。
         Map<String, Object> message = new HashMap<>();
         message.put("company_code", request.getCompanyCode());
         message.put("product_model", request.getProductModel());
         message.put("product_id", request.getProductId());
         message.put("timestamp", System.currentTimeMillis() / 1000); // Unix时间戳（秒）
 
-        // 构建data对象
+        // data 是 FSM 真正处理的命令主体。command_id 必须原样穿过小车回包，
+        // 云平台才能把异步结果更新到前端拿到的那一条命令记录上。
         Map<String, Object> data = new HashMap<>();
         data.put("command_id", request.getCommandId());
         data.put("trace_id", request.getTraceId());
         data.put("command", request.getCommand());
 
-        // 如果有参数，添加params字段
+        // 始终保留 params 对象，使无参命令与有参命令拥有一致的协议结构。
         if (request.getParams() != null && !request.getParams().isEmpty()) {
             data.put("params", request.getParams());
         } else {
@@ -184,6 +231,7 @@ public class TRailcarControlService {
     }
 
     private String normalizeId(String value, String prefix) {
+        // 支持调用方传入已有 ID；没有时生成短 UUID，便于日志阅读和接口传递。
         if (value != null && !value.trim().isEmpty()) {
             return value.trim();
         }
@@ -191,6 +239,7 @@ public class TRailcarControlService {
     }
 
     private Map<String, Object> buildCommandDetail(TRailcarCommandRequest request) {
+        // detail 是状态查询接口中的业务上下文，不参与发给小车的 MQTT 协议。
         Map<String, Object> detail = new LinkedHashMap<String, Object>();
         detail.put("deviceId", request.getFullDeviceId());
         detail.put("deviceType", "T_PYTHON");
@@ -210,10 +259,19 @@ public class TRailcarControlService {
     }
 
     /**
-     * 验证命令参数
-     * @param command 命令名称
-     * @param params 参数
-     * @return 错误消息，null表示验证通过
+     * 在发布 MQTT 前检查不同命令的最小必需参数。
+     *
+     * <p>这里不负责路线规划，也不判断机器人当前是否允许执行；它只保护通信协议：</p>
+     * <ul>
+     *   <li>保存/选择任务必须有非空 {@code taskName}；</li>
+     *   <li>删除点位必须有格式安全的唯一 {@code id}；</li>
+     *   <li>建模会话编号只允许字母、数字、下划线和短横线，避免非法缓存键；</li>
+     *   <li>摇杆、调速等命令必须携带各自需要的控制参数。</li>
+     * </ul>
+     *
+     * @param command FSM 命令名称
+     * @param params 前端提交的命令参数，可为空
+     * @return 验证失败时返回可读错误；返回 null 表示可以发送给小车
      */
     public String validateCommand(String command, Map<String, Object> params) {
         if (command == null || command.trim().isEmpty()) {
@@ -375,6 +433,7 @@ public class TRailcarControlService {
                 break;
 
             case "start_modeling":
+            case "new_modeling_area":
             case "finish_modeling":
             case "get_modeling_state":
             case "undo_modeling_point":
