@@ -14,8 +14,10 @@ import org.springframework.stereotype.Service;
 
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -358,6 +360,28 @@ public class TRailcarControlService {
             }
         }
 
+        if ("replan_modeling_route".equals(command)) {
+            Object areaOrder = params == null ? null : params.get("areaOrder");
+            if (!(areaOrder instanceof Iterable)) {
+                return "replan_modeling_route command requires non-empty areaOrder";
+            }
+            Set<Integer> seen = new HashSet<>();
+            for (Object value : (Iterable<?>) areaOrder) {
+                int areaNumber;
+                try {
+                    areaNumber = Integer.parseInt(String.valueOf(value));
+                } catch (NumberFormatException error) {
+                    return "replan_modeling_route areaOrder must contain area numbers";
+                }
+                if (areaNumber <= 0 || !seen.add(areaNumber)) {
+                    return "replan_modeling_route areaOrder must contain unique positive area numbers";
+                }
+            }
+            if (seen.isEmpty()) {
+                return "replan_modeling_route command requires non-empty areaOrder";
+            }
+        }
+
         switch (command) {
             case "drive":
             case "back":
@@ -435,6 +459,7 @@ public class TRailcarControlService {
             case "start_modeling":
             case "new_modeling_area":
             case "finish_modeling":
+            case "replan_modeling_route":
             case "get_modeling_state":
             case "undo_modeling_point":
             case "delete_modeling_point":

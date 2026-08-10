@@ -184,6 +184,7 @@ class TRailcarControllerModelingPointsTest {
         secondPathPoint.put("y", 0);
 
         Map<String, Object> data = new LinkedHashMap<>();
+        data.put("areaOrder", Arrays.asList(2, 1));
         data.put("areaPoints", Arrays.asList(areaPoint));
         data.put("linkPoints", Arrays.asList(linkPoint));
         data.put("pathPoints", Arrays.asList(firstPathPoint, secondPathPoint));
@@ -206,7 +207,8 @@ class TRailcarControllerModelingPointsTest {
         assertEquals(true, response.getBody().get("success"));
         assertEquals("\u89c4\u5212\u6210\u529f", response.getBody().get("message"));
         Map<?, ?> responseData = (Map<?, ?>) response.getBody().get("data");
-        assertEquals(3, responseData.size());
+        assertEquals(4, responseData.size());
+        assertEquals(Arrays.asList(2, 1), responseData.get("areaOrder"));
         assertEquals(1, ((List<?>) responseData.get("areaPoints")).size());
         assertEquals(1, ((List<?>) responseData.get("linkPoints")).size());
         List<?> pathPoints = (List<?>) responseData.get("pathPoints");

@@ -9,6 +9,7 @@ import org.mockito.ArgumentCaptor;
 import org.springframework.messaging.MessageChannel;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -348,6 +349,58 @@ class RailcarMessageServiceTest {
                 any(),
                 eq(24L),
                 eq(TimeUnit.HOURS));
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void shouldCacheAreaOrderAndPathReturnedByReplanModelingRoute() {
+        ObjectMapper objectMapper = new ObjectMapper();
+        RailcarMessageService service = new RailcarMessageService(objectMapper);
+
+        VehicleService vehicleService = mock(VehicleService.class);
+        RedisUtil redisUtil = mock(RedisUtil.class);
+        DeviceStatusPublisher deviceStatusPublisher = mock(DeviceStatusPublisher.class);
+        CommandStatusService commandStatusService = mock(CommandStatusService.class);
+
+        Vehicle vehicle = new Vehicle();
+        vehicle.setSerialNumber("-T01250002");
+        when(vehicleService.getBySerialNumber("-T01250002")).thenReturn(vehicle);
+        when(redisUtil.getVehicle("-T01250002")).thenReturn(new HashMap<String, Object>());
+        when(redisUtil.setVehicle(eq("-T01250002"), any(), anyLong(), eq(TimeUnit.SECONDS))).thenReturn(true);
+
+        ReflectionTestUtils.setField(service, "vehicleService", vehicleService);
+        ReflectionTestUtils.setField(service, "redisUtil", redisUtil);
+        ReflectionTestUtils.setField(service, "deviceStatusPublisher", deviceStatusPublisher);
+        ReflectionTestUtils.setField(service, "commandStatusService", commandStatusService);
+
+        service.handleTRailcarStatus("-T01250002", "{"
+                + "\"timestamp\":1718600011,"
+                + "\"data\":{"
+                + "\"type\":\"command_result\","
+                + "\"command_id\":\"cmd-replan-1\","
+                + "\"command\":\"replan_modeling_route\","
+                + "\"result\":{"
+                + "\"success\":true,"
+                + "\"message\":\"modeling route replanned\","
+                + "\"data\":{"
+                + "\"modelId\":\"model-1\","
+                + "\"areaOrder\":[2,1,3],"
+                + "\"taskPlan\":{\"status\":\"ready\",\"areaOrder\":[2,1,3],\"tasks\":[]}"
+                + "}"
+                + "}"
+                + "}"
+                + "}");
+
+        ArgumentCaptor<Object> cachedPathCaptor = ArgumentCaptor.forClass(Object.class);
+        verify(redisUtil).set(
+                eq("modeling_path:-T01250002:model-1"),
+                cachedPathCaptor.capture(),
+                eq(24L),
+                eq(TimeUnit.HOURS));
+        Map<String, Object> cachedPath = (Map<String, Object>) cachedPathCaptor.getValue();
+        assertEquals(Arrays.asList(2, 1, 3), cachedPath.get("areaOrder"));
+        Map<String, Object> taskPlan = (Map<String, Object>) cachedPath.get("taskPlan");
+        assertEquals(Arrays.asList(2, 1, 3), taskPlan.get("areaOrder"));
     }
 
     private String standardD01StatusFrame() {

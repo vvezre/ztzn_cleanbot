@@ -2,6 +2,8 @@ package com.zt.cleanbot.service;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -9,6 +11,28 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
 class TRailcarControlServiceModelingPathTest {
+
+    @Test
+    void acceptsUniquePositiveModelingAreaOrderAndRejectsInvalidOrders() {
+        TRailcarControlService service = new TRailcarControlService();
+        Map<String, Object> valid = new LinkedHashMap<>();
+        valid.put("areaOrder", Arrays.asList(2, 1, 3));
+        Map<String, Object> empty = new LinkedHashMap<>();
+        empty.put("areaOrder", Collections.emptyList());
+        Map<String, Object> duplicate = new LinkedHashMap<>();
+        duplicate.put("areaOrder", Arrays.asList(1, 1));
+        Map<String, Object> nonPositive = new LinkedHashMap<>();
+        nonPositive.put("areaOrder", Arrays.asList(0, 1));
+        Map<String, Object> invalidValue = new LinkedHashMap<>();
+        invalidValue.put("areaOrder", Arrays.asList("bad", 1));
+
+        assertNull(service.validateCommand("replan_modeling_route", valid));
+        assertNotNull(service.validateCommand("replan_modeling_route", null));
+        assertNotNull(service.validateCommand("replan_modeling_route", empty));
+        assertNotNull(service.validateCommand("replan_modeling_route", duplicate));
+        assertNotNull(service.validateCommand("replan_modeling_route", nonPositive));
+        assertNotNull(service.validateCommand("replan_modeling_route", invalidValue));
+    }
 
     @Test
     void acceptsModelingPathCommandWithValidModelId() {

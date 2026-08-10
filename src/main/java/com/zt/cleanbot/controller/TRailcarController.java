@@ -464,6 +464,8 @@ public class TRailcarController {
         }
 
         Map<String, Object> responseData = new LinkedHashMap<>();
+        Object areaOrder = resultData.get("areaOrder");
+        responseData.put("areaOrder", areaOrder instanceof List ? areaOrder : Collections.emptyList());
         responseData.put("areaPoints", areaPoints);
         responseData.put("linkPoints", linkPoints);
         responseData.put("pathPoints", pathPoints);

@@ -578,7 +578,7 @@ public class RailcarMessageService {
      * 缓存尚未命名保存的建模规划结果。
      *
      * <p>路径算法运行在小车 FSM 中。云平台不重新计算，只接收
-     * {@code get_modeling_path/finish_modeling} 的成功结果，并按“设备 + modelId”缓存。
+     * {@code get_modeling_path/finish_modeling/replan_modeling_route} 的成功结果，并按“设备 + modelId”缓存。
      * 这样同一台小车的不同建模会话、不同小车之间都不会互相覆盖。</p>
      */
     private void cacheModelingPathIfPresent(String serialNumber, JsonNode dataNode, String messageType) {
@@ -586,7 +586,9 @@ public class RailcarMessageService {
             return;
         }
         String command = readText(dataNode, "command");
-        if (!"get_modeling_path".equals(command) && !"finish_modeling".equals(command)) {
+        if (!"get_modeling_path".equals(command)
+                && !"finish_modeling".equals(command)
+                && !"replan_modeling_route".equals(command)) {
             return;
         }
         JsonNode resultNode = dataNode.path("result");
