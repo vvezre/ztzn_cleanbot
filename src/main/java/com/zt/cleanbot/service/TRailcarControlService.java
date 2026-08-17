@@ -457,6 +457,7 @@ public class TRailcarControlService {
                 break;
 
             case "start_modeling":
+            case "new_modeling_link":
             case "new_modeling_area":
             case "finish_modeling":
             case "replan_modeling_route":
