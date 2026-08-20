@@ -309,6 +309,41 @@ public class RailcarMessageService {
             redisData.put("walkSpeed", speed);
         }
 
+        Integer xSpeed = readInt(statusNode, "xSpeed");
+        if (xSpeed != null) {
+            redisData.put("xSpeed", xSpeed);
+        } else if (speed != null) {
+            redisData.put("xSpeed", speed);
+        }
+
+        String motionState = readText(statusNode, "motionState");
+        if (motionState != null) {
+            redisData.put("motionState", motionState);
+        }
+        Boolean manualSteeringAllowed = readBoolean(statusNode, "manualSteeringAllowed");
+        if (manualSteeringAllowed != null) {
+            redisData.put("manualSteeringAllowed", manualSteeringAllowed);
+        }
+        String manualSteeringMode = readText(statusNode, "manualSteeringMode");
+        if (manualSteeringMode != null) {
+            redisData.put("manualSteeringMode", manualSteeringMode);
+        }
+        String manualSteeringDirection = readText(statusNode, "manualSteeringDirection");
+        if (manualSteeringDirection != null) {
+            redisData.put("manualSteeringDirection", manualSteeringDirection);
+        } else if (statusNode.has("manualSteeringDirection")) {
+            // Explicit null/empty means the previous button hold has ended.
+            redisData.remove("manualSteeringDirection");
+        }
+        Integer manualCorrectionValue = readInt(statusNode, "manualCorrectionValue");
+        if (manualCorrectionValue != null) {
+            redisData.put("manualCorrectionValue", manualCorrectionValue);
+        }
+        Integer manualCorrectionLevel = readInt(statusNode, "manualCorrectionLevel");
+        if (manualCorrectionLevel != null) {
+            redisData.put("manualCorrectionLevel", manualCorrectionLevel);
+        }
+
         Integer brushSpeed = readInt(statusNode, "brush_speed");
         if (brushSpeed != null) {
             redisData.put("brushSpeed", brushSpeed);

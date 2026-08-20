@@ -54,6 +54,11 @@ class DeviceStatusPublisherTest {
         Map<String, Object> redisData = new java.util.HashMap<>();
         redisData.put("status", "disabled");
         redisData.put("onlineState", "ONLINE");
+        redisData.put("xSpeed", -100);
+        redisData.put("motionState", "reverse");
+        redisData.put("manualSteeringAllowed", true);
+        redisData.put("manualSteeringMode", "reverse_trim");
+        redisData.put("manualCorrectionValue", 50);
 
         publisher.publishDeviceStatus("-T01250001", redisData);
 
@@ -62,5 +67,10 @@ class DeviceStatusPublisherTest {
 
         JsonNode notification = objectMapper.readTree(body.getValue());
         assertEquals("idle", notification.path("statusNormalized").asText());
+        assertEquals(-100, notification.path("xSpeed").asInt());
+        assertEquals("reverse", notification.path("motionState").asText());
+        assertEquals(true, notification.path("manualSteeringAllowed").asBoolean());
+        assertEquals("reverse_trim", notification.path("manualSteeringMode").asText());
+        assertEquals(50, notification.path("manualCorrectionValue").asInt());
     }
 }

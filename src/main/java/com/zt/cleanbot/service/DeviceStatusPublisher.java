@@ -129,6 +129,15 @@ public class DeviceStatusPublisher {
                 notification.put("faultState", toStringValue(redisData.get("faultState")));
                 notification.put("speed", firstInteger(redisData.get("speed"), redisData.get("walkSpeed")));
                 notification.put("walkSpeed", toInteger(redisData.get("walkSpeed")));
+                notification.put("xSpeed", firstInteger(
+                        redisData.get("xSpeed"),
+                        firstInteger(redisData.get("speed"), redisData.get("walkSpeed"))));
+                notification.put("motionState", toStringValue(redisData.get("motionState")));
+                notification.put("manualSteeringAllowed", toBoolean(redisData.get("manualSteeringAllowed")));
+                notification.put("manualSteeringMode", toStringValue(redisData.get("manualSteeringMode")));
+                notification.put("manualSteeringDirection", toStringValue(redisData.get("manualSteeringDirection")));
+                notification.put("manualCorrectionValue", toInteger(redisData.get("manualCorrectionValue")));
+                notification.put("manualCorrectionLevel", toInteger(redisData.get("manualCorrectionLevel")));
                 notification.put("brushSpeed", toInteger(redisData.get("brushSpeed")));
                 notification.put("voltage", toDouble(redisData.get("voltage")));
                 notification.put("lat", resolveLat(redisData));

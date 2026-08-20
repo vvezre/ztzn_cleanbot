@@ -13,6 +13,25 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 class TRailcarControlServiceModelingPathTest {
 
     @Test
+    void validatesManualSteeringGestureParameters() {
+        TRailcarControlService service = new TRailcarControlService();
+        Map<String, Object> valid = new LinkedHashMap<>();
+        valid.put("action", "hold_start");
+        valid.put("direction", "left");
+        valid.put("controlId", "button-1");
+        valid.put("sequence", 1);
+        Map<String, Object> missingDirection = new LinkedHashMap<>(valid);
+        missingDirection.remove("direction");
+        Map<String, Object> invalidSequence = new LinkedHashMap<>(valid);
+        invalidSequence.put("sequence", -1);
+
+        assertNull(service.validateCommand("manual_steering", valid));
+        assertNotNull(service.validateCommand("manual_steering", null));
+        assertNotNull(service.validateCommand("manual_steering", missingDirection));
+        assertNotNull(service.validateCommand("manual_steering", invalidSequence));
+    }
+
+    @Test
     void acceptsUniquePositiveModelingAreaOrderAndRejectsInvalidOrders() {
         TRailcarControlService service = new TRailcarControlService();
         Map<String, Object> valid = new LinkedHashMap<>();

@@ -184,6 +184,12 @@ class RailcarMessageServiceTest {
         assertEquals(0.018, (Double) status.get("distanceToTaskOriginM"), 0.0001);
         assertEquals(0.02, (Double) status.get("taskOriginToleranceM"), 0.0001);
         assertFalse(Boolean.TRUE.equals(status.get("isAtTaskOrigin")));
+        assertEquals("forward", status.get("motionState"));
+        assertTrue(Boolean.TRUE.equals(status.get("manualSteeringAllowed")));
+        assertEquals("forward_trim", status.get("manualSteeringMode"));
+        assertEquals("left", status.get("manualSteeringDirection"));
+        assertEquals(-100, status.get("manualCorrectionValue"));
+        assertEquals(2, status.get("manualCorrectionLevel"));
     }
 
     @Test
@@ -481,6 +487,13 @@ class RailcarMessageServiceTest {
                 + "\"fault_state\":\"NONE\","
                 + "\"battery\":86,"
                 + "\"speed\":0,"
+                + "\"xSpeed\":100,"
+                + "\"motionState\":\"forward\","
+                + "\"manualSteeringAllowed\":true,"
+                + "\"manualSteeringMode\":\"forward_trim\","
+                + "\"manualSteeringDirection\":\"left\","
+                + "\"manualCorrectionValue\":-100,"
+                + "\"manualCorrectionLevel\":2,"
                 + "\"brush_speed\":50,"
                 + "\"voltage\":48.5,"
                 + "\"lat\":31.123455,"

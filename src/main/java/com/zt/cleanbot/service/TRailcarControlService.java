@@ -402,6 +402,36 @@ public class TRailcarControlService {
                 }
                 break;
 
+            case "manual_steering":
+                if (params == null) {
+                    return "manual_steering command requires params";
+                }
+                String action = String.valueOf(params.get("action"));
+                if (!("tap".equals(action) || "hold_start".equals(action)
+                        || "keepalive".equals(action) || "hold_stop".equals(action)
+                        || "reset".equals(action))) {
+                    return "manual_steering action must be tap, hold_start, keepalive, hold_stop or reset";
+                }
+                if (!"reset".equals(action)) {
+                    String direction = String.valueOf(params.get("direction"));
+                    if (!("left".equals(direction) || "right".equals(direction))) {
+                        return "manual_steering direction must be left or right";
+                    }
+                }
+                Object controlId = params.get("controlId");
+                if (controlId == null || !String.valueOf(controlId).matches("[A-Za-z0-9._:-]{1,80}")) {
+                    return "manual_steering requires valid controlId";
+                }
+                Object sequence = params.get("sequence");
+                try {
+                    if (sequence == null || Long.parseLong(String.valueOf(sequence)) < 0) {
+                        return "manual_steering sequence must be a non-negative integer";
+                    }
+                } catch (NumberFormatException error) {
+                    return "manual_steering sequence must be a non-negative integer";
+                }
+                break;
+
             case "adjust_speed":
             case "adjust_brush_speed":
                 if (params == null || !params.containsKey("speed")) {
