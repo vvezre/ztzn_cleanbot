@@ -124,6 +124,23 @@ class TRailcarControlServiceModelingPathTest {
     }
 
     @Test
+    void validatesOptionalReturnToOriginWhenSelectingCurrentTask() {
+        TRailcarControlService service = new TRailcarControlService();
+        Map<String, Object> withBoolean = new LinkedHashMap<>();
+        withBoolean.put("taskName", "route-a");
+        withBoolean.put("returnToOrigin", false);
+        Map<String, Object> withoutOption = new LinkedHashMap<>();
+        withoutOption.put("taskName", "route-a");
+        Map<String, Object> invalid = new LinkedHashMap<>();
+        invalid.put("taskName", "route-a");
+        invalid.put("returnToOrigin", "sometimes");
+
+        assertNull(service.validateCommand("set_current_task", withBoolean));
+        assertNull(service.validateCommand("set_current_task", withoutOption));
+        assertNotNull(service.validateCommand("set_current_task", invalid));
+    }
+
+    @Test
     void acceptsModelingPointCommandWithValidIdentifiers() {
         TRailcarControlService service = new TRailcarControlService();
         Map<String, Object> params = new LinkedHashMap<>();

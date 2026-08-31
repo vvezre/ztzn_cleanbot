@@ -732,6 +732,7 @@ public class TRailcarController {
         data.put("productId", productId);
         data.put("serialNumber", deviceId);
         data.put("currentTaskName", resultData.get("currentTaskName"));
+        data.put("currentReturnToOrigin", resultData.get("currentReturnToOrigin"));
         data.put("routes", resultData.get("routes"));
         response.put("success", true);
         response.put("message", "\u83b7\u53d6\u5df2\u4fdd\u5b58\u8def\u7ebf\u6210\u529f");
@@ -742,7 +743,7 @@ public class TRailcarController {
     /**
      * 真正设置小车下一次 auto_drive 要执行的路线，不等同于前端页面高亮。
      *
-     * 请求：{"productId":"250001","taskName":"路线1"}
+     * 请求：{"productId":"250001","taskName":"路线1","returnToOrigin":true}
      *
      * 小车端 set_current_task 成功后，会将路线配置同步为 config.json 和 Redis currentTaskName。
      * 只有完成该步骤，后续 auto_drive 才会执行该路线。
@@ -750,13 +751,17 @@ public class TRailcarController {
      */
     @PostMapping("/tasks/current")
     public ResponseEntity<Map<String, Object>> selectRobotTask(
-            @RequestBody Map<String, String> payload,
+            @RequestBody Map<String, Object> payload,
             HttpServletRequest httpRequest) {
         Integer userId = (Integer) httpRequest.getAttribute("userId");
         Integer roleId = (Integer) httpRequest.getAttribute("roleId");
         String username = (String) httpRequest.getAttribute("username");
-        String productId = payload.get("productId");
-        String taskName = payload.get("taskName");
+        String productId = payload.get("productId") == null
+                ? null : String.valueOf(payload.get("productId"));
+        String taskName = payload.get("taskName") == null
+                ? null : String.valueOf(payload.get("taskName"));
+        Object returnToOriginValue = payload.get("returnToOrigin");
+        Boolean returnToOrigin = parseOptionalBoolean(returnToOriginValue);
         Map<String, Object> response = new LinkedHashMap<>();
 
         if (userId == null) {
@@ -772,6 +777,15 @@ public class TRailcarController {
             response.put("data", null);
             return ResponseEntity.badRequest().body(response);
         }
+        if (returnToOriginValue != null && returnToOrigin == null) {
+            response.put("success", false);
+            response.put("message", "returnToOrigin must be true or false");
+            response.put("data", null);
+            return ResponseEntity.badRequest().body(response);
+        }
+        if (returnToOrigin == null) {
+            returnToOrigin = Boolean.TRUE;
+        }
 
         String deviceId = "-T01" + productId;
         if (!vehicleService.hasDeviceAccess(userId, roleId, deviceId)) {
@@ -781,10 +795,13 @@ public class TRailcarController {
             return ResponseEntity.status(403).body(response);
         }
 
+        Map<String, Object> commandParams = new LinkedHashMap<>();
+        commandParams.put("taskName", taskName.trim());
+        commandParams.put("returnToOrigin", returnToOrigin);
         TRailcarControlResponse commandResponse = sendTaskCommand(
                 productId,
                 "set_current_task",
-                taskName.trim(),
+                commandParams,
                 userId,
                 username);
         if (!Boolean.TRUE.equals(commandResponse.getSuccess())) {
@@ -813,6 +830,11 @@ public class TRailcarController {
         redisUtil.delete("task_path:" + deviceId);
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("taskName", taskName.trim());
+        data.put("returnToOrigin", returnToOrigin);
+        Map<String, Object> resultData = extractCommandData(snapshot);
+        if (resultData != null && resultData.get("taskCount") != null) {
+            data.put("taskCount", resultData.get("taskCount"));
+        }
         response.put("success", true);
         response.put("message", "\u8def\u7ebf\u9009\u62e9\u6210\u529f");
         response.put("data", data);
@@ -1057,6 +1079,23 @@ public class TRailcarController {
             params.put("taskName", taskName);
         }
         return sendTaskCommand(productId, command, params, userId, username);
+    }
+
+    private Boolean parseOptionalBoolean(Object value) {
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof Boolean) {
+            return (Boolean) value;
+        }
+        String text = String.valueOf(value).trim();
+        if ("true".equalsIgnoreCase(text) || "1".equals(text)) {
+            return Boolean.TRUE;
+        }
+        if ("false".equalsIgnoreCase(text) || "0".equals(text)) {
+            return Boolean.FALSE;
+        }
+        return null;
     }
 
     private TRailcarControlResponse sendTaskCommand(

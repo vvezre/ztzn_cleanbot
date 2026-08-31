@@ -300,6 +300,17 @@ public class TRailcarControlService {
             if (taskName == null || String.valueOf(taskName).trim().isEmpty()) {
                 return command + " command requires non-empty taskName";
             }
+            if ("set_current_task".equals(command) && params.containsKey("returnToOrigin")) {
+                Object returnToOrigin = params.get("returnToOrigin");
+                String text = String.valueOf(returnToOrigin).trim();
+                if (!(returnToOrigin instanceof Boolean)
+                        && !"true".equalsIgnoreCase(text)
+                        && !"false".equalsIgnoreCase(text)
+                        && !"1".equals(text)
+                        && !"0".equals(text)) {
+                    return "set_current_task command requires boolean returnToOrigin";
+                }
+            }
         }
 
         if ("get_modeling_path".equals(command)) {

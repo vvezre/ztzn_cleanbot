@@ -24,6 +24,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -340,6 +341,7 @@ class TRailcarControllerModelingPointsTest {
         Map<String, Object> resultData = new LinkedHashMap<>();
         resultData.put("routes", Arrays.asList(route));
         resultData.put("currentTaskName", "route-a");
+        resultData.put("currentReturnToOrigin", false);
         when(commandStatusService.waitForTerminal(eq("cmd-routes-1"), eq(10_000L)))
                 .thenReturn(succeededSnapshot(resultData));
 
@@ -353,6 +355,7 @@ class TRailcarControllerModelingPointsTest {
         assertEquals("250001", data.get("productId"));
         assertEquals("-T01250001", data.get("serialNumber"));
         assertEquals("route-a", data.get("currentTaskName"));
+        assertEquals(false, data.get("currentReturnToOrigin"));
         List<?> routes = (List<?>) data.get("routes");
         assertEquals(1, routes.size());
         assertEquals("route-a", ((Map<?, ?>) routes.get(0)).get("taskName"));
@@ -404,12 +407,15 @@ class TRailcarControllerModelingPointsTest {
                         "trace-select-1"));
         Map<String, Object> resultData = new LinkedHashMap<>();
         resultData.put("taskName", "route-b");
+        resultData.put("returnToOrigin", false);
+        resultData.put("taskCount", 21);
         when(commandStatusService.waitForTerminal(eq("cmd-select-1"), eq(10_000L)))
                 .thenReturn(succeededSnapshot(resultData));
 
-        Map<String, String> payload = new LinkedHashMap<>();
+        Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("productId", "250001");
         payload.put("taskName", "route-b");
+        payload.put("returnToOrigin", false);
         ResponseEntity<Map<String, Object>> response =
                 controller.selectRobotTask(payload, request);
 
@@ -418,6 +424,34 @@ class TRailcarControllerModelingPointsTest {
         assertEquals(
                 "route-b",
                 ((Map<?, ?>) response.getBody().get("data")).get("taskName"));
+        assertEquals(
+                false,
+                ((Map<?, ?>) response.getBody().get("data")).get("returnToOrigin"));
+        assertEquals(
+                21,
+                ((Map<?, ?>) response.getBody().get("data")).get("taskCount"));
+
+        ArgumentCaptor<TRailcarCommandRequest> captor =
+                ArgumentCaptor.forClass(TRailcarCommandRequest.class);
+        verify(controlService).sendCommand(captor.capture());
+        assertEquals("route-b", captor.getValue().getParams().get("taskName"));
+        assertEquals(false, captor.getValue().getParams().get("returnToOrigin"));
+    }
+
+    @Test
+    void rejectsInvalidReturnToOriginBeforeSendingRouteSelection() {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("productId", "250001");
+        payload.put("taskName", "route-b");
+        payload.put("returnToOrigin", "sometimes");
+
+        ResponseEntity<Map<String, Object>> response =
+                controller.selectRobotTask(payload, request);
+
+        assertEquals(400, response.getStatusCodeValue());
+        assertEquals(false, response.getBody().get("success"));
+        assertEquals("returnToOrigin must be true or false", response.getBody().get("message"));
+        verify(controlService, never()).sendCommand(any(TRailcarCommandRequest.class));
     }
 
     private CommandStatusSnapshot succeededSnapshot(Map<String, Object> resultData) {
